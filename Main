@@ -1,0 +1,811 @@
+import tkinter as tk
+from tkinter import Canvas, filedialog
+from PIL import Image, ImageTk
+import os
+
+# Créer une fenêtre tkinter avec fond transparent
+root = tk.Tk()
+root.overrideredirect(True)  # Pas de bordure
+root.attributes('-topmost', True)  # Toujours au-dessus
+root.attributes('-transparentcolor', 'black')  # Noir = transparent
+root.attributes('-alpha', 0.9)  # Légère transparence
+root.geometry("300x300+500+300")
+
+# Canvas pour dessiner
+canvas = Canvas(root, width=300, height=300, bg='black', highlightthickness=0)
+canvas.pack()
+
+# Variables de position
+x, y = 150,150
+dragging = False
+drag_start_x = 0
+drag_start_y = 0
+
+# Variables pour l'image
+character_image = None
+photo_image = None
+rotated_photo_image = None
+
+# Variables pour le mode pêche
+fishing_mode = False
+fishing_rod = None
+fish = None
+fishing_timer = None
+
+# Variables pour le système gacha
+gacha_active = False
+next_fish_time = 0
+fish_collection = {}
+fishing_start_time = 0
+gacha_timer = None
+
+# Variables pour le système d'aura
+animations = {}  # Dictionnaire pour stocker toutes les animations actives
+next_animation_id = 1  # ID unique pour chaque animation
+
+# Liste des poissons par rareté
+FISH_DATABASE = {
+    "Commun": [
+        {"name": "Carpe argentée", "description": "Une carpe brillante"},
+        {"name": "Gardon rouge", "description": "Petit poisson vif"},
+        {"name": "Truite des ruisseaux", "description": "Poisson d'eau douce"},
+        {"name": "Perche commune", "description": "Prédateur des lacs"},
+        {"name": "Brochet miniature", "description": "Petit chasseur"}
+    ],
+    "Peu Commun": [
+        {"name": "Saumon sauvage", "description": "Poisson migrateur"},
+        {"name": "Anguille électrique", "description": "Poisson surprenant"},
+        {"name": "Bar de mer", "description": "Poisson côtier"},
+        {"name": "Dorade rosée", "description": "Poisson des récifs"}
+    ],
+    "Rare": [
+        {"name": "Thon rouge", "description": "Géant des océans"},
+        {"name": "Requin-citron", "description": "Prédateur tropical"},
+        {"name": "Espadon majestueux", "description": "Noble guerrier des mers"}
+    ],
+    "Épique": [
+        {"name": "Cachalot ancien", "description": "Seigneur des profondeurs"},
+        {"name": "Raie manta géante", "description": "Danseuse des océans"}
+    ],
+    "Mythique": [
+        {"name": "Kraken adolescent", "description": "Tentacules mystérieux"},
+        {"name": "Leviathan des abysses", "description": "Monstre marin légendaire"}
+    ],
+    "Légendaire": [
+        {"name": "Poseidon's Blessing", "description": "Poisson divin unique"}
+    ]
+}
+
+# Types de mutations
+MUTATIONS = {
+    "Chromatique": {"multiplier": 2, "emoji": "🌈", "message": "Mutation Chromatique !"},
+    "Bioluninescent": {"multiplier": 3, "emoji": "💫", "message": "Mutation Bioluninescente !"},
+    "Abyssal": {"multiplier": 5, "emoji": "🌑", "message": "Mutation Abyssale !"},
+    "Cosmique": {"multiplier": 10, "emoji": "🌌", "message": "Mutation Cosmique !"},
+    "Divin": {"multiplier": 20, "emoji": "✨", "message": "Mutation Divine !"}
+}
+
+# Probabilités de base
+RARITY_CHANCES = {
+    "Commun": 41,
+    "Peu Commun": 25,
+    "Rare": 20,
+    "Épique": 10,
+    "Mythique": 3,
+    "Légendaire": 1
+}
+
+# Couleurs d'aura selon la rareté (plus visibles pour les rares)
+AURA_COLORS = {
+    "Commun": "#808080",      # Gris
+    "Peu Commun": "#90EE90",  # Vert clair
+    "Rare": "#1E90FF",        # Bleu vif (plus visible)
+    "Épique": "#FF00FF",        # Cyan vif (très visible)
+    "Mythique": "#FF1493",      # Rouge vif (très visible)
+    "Légendaire": "#FFD700",   # Or (très visible)
+}
+
+# Configuration de l'animation parfaite
+class AnimationConfig:
+    def __init__(self):
+        # DISPOSITION
+        self.cone_width = 120           # Largeur du cône
+        self.base_radius = 40           # Rayon de base
+        self.point_radius = 2           # Rayon de la pointe
+        self.particle_count = 25         # Nombre de particules
+        
+        # TAILLE
+        self.min_size = 3                # Taille minimale
+        self.max_size = 8                # Taille maximale
+        
+        # VITESSE
+        self.vx_min = -0.8              # Vitesse X minimale
+        self.vx_max = 0.8               # Vitesse X maximale
+        self.vy_min = -0.1              # Vitesse Y minimale
+        self.vy_max = 0.1               # Vitesse Y maximale
+        self.gravity = 0.001             # Gravité
+        
+        # DURÉE
+        self.life_duration = 250         # Durée de vie en frames (20 secondes)
+        
+        # TRANSPARENCE
+        self.stages = [
+            {"life": 176, "stipple": "gray75"},  # 88% de vie (16s)
+            {"life": 128, "stipple": "gray50"},   # 64% de vie (10s)
+            {"life": 80, "stipple": "gray25"},   # 40% de vie (6s)
+            {"life": 32, "shrink": True}        # 16% de vie (5s)
+        ]
+
+# Instance de configuration globale
+animation_config = AnimationConfig()
+
+class PerfectAnimation:
+    def __init__(self, animation_id, color, x, y, config):
+        self.id = animation_id
+        self.color = color
+        self.x = x
+        self.y = y
+        self.config = config
+        self.particles = []
+        self.timer = None
+        self.active = True
+        self.create_particles()
+    
+    def create_particles(self):
+        """Créer les particules selon la configuration"""
+        import random
+        import math
+        
+        for i in range(self.config.particle_count):
+            # Position sur la largeur du cône
+            width_ratio = (i / self.config.particle_count) - 0.5
+            
+            # Rayon à cette position (plus grand au centre, plus petit sur les bords)
+            current_radius = self.config.base_radius * (1 - abs(width_ratio) * 1.5)
+            if current_radius < self.config.point_radius:
+                current_radius = self.config.point_radius
+            
+            # Position X et Y
+            current_x = self.x + (width_ratio * self.config.cone_width)
+            current_y = self.y + random.randint(-10, 10)
+            
+            # Vitesse selon la position
+            if width_ratio < 0:
+                vx = random.uniform(self.config.vx_min, self.config.vx_min/2)
+            elif width_ratio > 0:
+                vx = random.uniform(self.config.vx_max/2, self.config.vx_max)
+            else:
+                vx = random.uniform(self.config.vx_min/3, self.config.vx_max/3)
+            
+            vy = random.uniform(self.config.vy_min, self.config.vy_max)
+            
+            # Taille de particule (plus grandes au centre)
+            size = random.randint(self.config.min_size, self.config.max_size) * (1 - abs(width_ratio))
+            if size < 1:
+                size = 1
+            
+            # Transparence selon la position
+            if abs(width_ratio) < 0.2:
+                stipple = 'gray25'  # Centre : plus opaque
+            elif abs(width_ratio) < 0.4:
+                stipple = 'gray50'  # Milieu : moyennement transparent
+            else:
+                stipple = 'gray75'  # Bords : plus transparent
+            
+            particle = canvas.create_oval(
+                current_x - size, current_y - size,
+                current_x + size, current_y + size,
+                fill=self.color,
+                outline='',
+                stipple=stipple
+            )
+            
+            self.particles.append({
+                "id": particle,
+                "type": "cone_dispersed",
+                "x": current_x,
+                "y": current_y,
+                "vx": vx,
+                "vy": vy,
+                "size": size,
+                "base_size": size,
+                "life": self.config.life_duration,
+                "max_life": self.config.life_duration
+            })
+
+    def animate(self):
+        """Animer cette animation spécifique avec disparition FEDP parfaite"""
+        if not self.active:
+            return
+        
+        import math
+        particles_to_remove = []
+        
+        for particle in self.particles:
+            particle["life"] -= 1
+            
+            if particle["life"] <= 0:
+                if isinstance(particle["id"], list):
+                    for item in particle["id"]:
+                        canvas.delete(item)
+                else:
+                    canvas.delete(particle["id"])
+                particles_to_remove.append(particle)
+            else:
+                if particle["type"] == "cone_dispersed":
+                    # Mouvement
+                    particle["x"] += particle["vx"]
+                    particle["y"] += particle["vy"]
+                    particle["vy"] += self.config.gravity
+                    
+                    # Taille dynamique (FEDP)
+                    life_ratio = particle["life"] / particle["max_life"]
+                    
+                    # Calculer la taille selon les étapes
+                    size = particle["base_size"] * life_ratio
+                    
+                    # Appliquer les étapes de transparence et de grossissement
+                    for stage in self.config.stages:
+                        if particle["life"] < stage["life"]:
+                            if "stipple" in stage:
+                                canvas.itemconfig(particle["id"], stipple=stage["stipple"])
+                            elif "shrink" in stage:
+                                # Grossissement exponentiel à la fin
+                                size = particle["base_size"] * (0.3 + life_ratio * 0.7)
+                            break
+                    
+                    canvas.coords(
+                        particle["id"],
+                        particle["x"] - size, particle["y"] - size,
+                        particle["x"] + size, particle["y"] + size
+                    )
+                
+                elif particle["type"] == "fountain":
+                    particle["x"] += particle["vx"]
+                    particle["y"] += particle["vy"]
+                    particle["vy"] += 0.12
+                    
+                    canvas.coords(
+                        particle["id"],
+                        particle["x"] - particle["size"], particle["y"] - particle["size"],
+                        particle["x"] + particle["size"], particle["y"] + particle["size"]
+                    )
+                
+                elif particle["type"] == "circle":
+                    particle["radius"] += particle["growth_speed"]
+                    
+                    # Transparence qui augmente vers la fin (disparition progressive sur 10 secondes)
+                    if particle["life"] < 80:
+                        canvas.itemconfig(particle["id"], stipple='gray75')
+                    if particle["life"] < 30:
+                        canvas.itemconfig(particle["id"], stipple='gray25')
+                    
+                    canvas.coords(
+                        particle["id"],
+                        particle["x"] - particle["radius"], particle["y"] - particle["radius"],
+                        particle["x"] + particle["radius"], particle["y"] + particle["radius"]
+                    )
+        
+        for particle in particles_to_remove:
+            self.particles.remove(particle)
+        
+        if self.active and len(self.particles) > 0:
+            self.timer = root.after(80, self.animate)
+        elif len(self.particles) == 0:
+            self.stop()
+    
+    def stop(self):
+        """Arrêter cette animation spécifique"""
+        self.active = False
+        if self.timer:
+            root.after_cancel(self.timer)
+        
+        for particle in self.particles:
+            if isinstance(particle["id"], list):
+                for item in particle["id"]:
+                    canvas.delete(item)
+            else:
+                canvas.delete(particle["id"])
+        
+        if self.id in animations:
+            del animations[self.id]
+
+def load_image():
+    global character_image, photo_image
+    # Essayer de charger l'image du chat automatiquement
+    try:
+        if os.path.exists("pet_image.png"):
+            character_image = Image.open("pet_image.png")
+            character_image = character_image.resize((250, 250), Image.Resampling.LANCZOS)
+            photo_image = ImageTk.PhotoImage(character_image)
+            print("Image du chat chargée avec succès!")
+            return True
+    except Exception as e:
+        print(f"Erreur lors du chargement de l'image du chat: {e}")
+    
+    # Si l'image n'existe pas, demander à l'utilisateur
+    file_path = filedialog.askopenfilename(
+        title="Choisir une image pour le personnage",
+        filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"), ("Tous les fichiers", "*.*")]
+    )
+    
+    if file_path:
+        try:
+            character_image = Image.open(file_path)
+            character_image = character_image.resize((250, 250), Image.Resampling.LANCZOS)
+            photo_image = ImageTk.PhotoImage(character_image)
+            print("Image chargée avec succès!")
+            return True
+        except Exception as e:
+            print(f"Erreur lors du chargement de l'image: {e}")
+            return False
+    return False
+
+def draw_character():
+    canvas.delete("all")
+    
+    if photo_image:
+        # Dessiner l'image chargée (normale)
+        canvas.create_image(x, y, image=photo_image)
+    else:
+        # Dessiner le personnage par défaut
+        # Corps
+        canvas.create_rectangle(x-10, y, x+10, y+25, fill='#4A90E2', outline='')
+        # Tête
+        canvas.create_oval(x-8, y-15, x+8, y, fill='#FDBCB4', outline='')
+        # Chapeau
+        canvas.create_oval(x-10, y-20, x+10, y-15, fill='#8B4513', outline='')
+        # Yeux
+        canvas.create_oval(x-3, y-12, x-1, y-10, fill='black', outline='')
+        canvas.create_oval(x+1, y-12, x+3, y-10, fill='black', outline='')
+        # Sourire
+        canvas.create_arc(x-4, y-10, x+4, y-6, start=0, extent=180, style='arc', outline='black', width=1)
+    
+    # L'aura est gérée par l'animation séparément
+
+def start_aura(rarity):
+    """Démarrer l'animation parfaite"""
+    global next_animation_id, animations
+    
+    # Créer l'animation parfaite
+    animation = PerfectAnimation(next_animation_id, 
+                               AURA_COLORS.get(rarity, "#808080"), x, y, 
+                               animation_config)
+    animations[next_animation_id] = animation
+    
+    # Démarrer l'animation (la méthode animate() gère la boucle elle-même)
+    animation.animate()
+    
+    print(f"Aura {rarity.lower()} (parfaite) activee !")
+    
+    next_animation_id += 1
+
+def stop_aura(animation_id=None):
+    """Arrêter une animation spécifique ou toutes les animations"""
+    global animations
+    
+    if animation_id:
+        # Arrêter une animation spécifique
+        if animation_id in animations:
+            animations[animation_id].stop()
+            print(f"Animation {animation_id} arrêtée")
+    else:
+        # Arrêter toutes les animations
+        ids_to_stop = list(animations.keys())
+        for anim_id in ids_to_stop:
+            animations[anim_id].stop()
+        print("Toutes les animations arrêtées")
+
+def draw_fishing_gear():
+    global fishing_rod, fish
+    
+    # Canne à pêche
+    fishing_rod = canvas.create_line(x+30, y-50, x+80, y+20, fill='#8B4513', width=3)
+    
+    # Ligne de pêche
+    canvas.create_line(x+80, y+20, x+85, y+60, fill='gray', width=1)
+    
+    # Poisson (bougeant)
+    import random
+    fish_offset = random.randint(-5, 5)
+    fish = canvas.create_oval(x+75+fish_offset, y+55, x+95+fish_offset, y+70, fill='#FFA500', outline='black')
+    
+    # Bulles
+    for i in range(3):
+        bubble_y = y+80 + i*15
+        bubble_x = x+85 + random.randint(-10, 10)
+        canvas.create_oval(bubble_x-3, bubble_y-3, bubble_x+3, bubble_y+3, fill='lightblue', outline='blue')
+
+def toggle_fishing_mode():
+    global fishing_mode, fishing_timer, gacha_active, gacha_timer, fishing_start_time
+    
+    fishing_mode = not fishing_mode
+    
+    if fishing_mode:
+        print("Mode peche ACTIVE - Le pet commence a pecher...")
+        # Démarrer le système gacha
+        start_gacha_system()
+        # Démarrer l'animation de pêche
+        animate_fishing()
+    else:
+        print("Mode normal - Le pet arrete de pecher")
+        # Arrêter le système gacha
+        stop_gacha_system()
+        # Arrêter l'animation
+        if fishing_timer:
+            root.after_cancel(fishing_timer)
+
+def start_gacha_system():
+    global gacha_active, fishing_start_time, gacha_timer
+    import time
+    gacha_active = True
+    fishing_start_time = time.time()
+    schedule_next_fish()
+
+def stop_gacha_system():
+    global gacha_active, gacha_timer
+    gacha_active = False
+    if gacha_timer:
+        root.after_cancel(gacha_timer)
+        print("Timer de peche arrete")
+
+def schedule_next_fish():
+    global gacha_timer, next_fish_time
+    if not gacha_active:
+        return
+    
+    import random
+    # Temps aléatoire entre 5-60 secondes
+    wait_time = random.randint(5000, 60000)  # en millisecondes
+    next_fish_time = wait_time
+    
+    print(f"Le pet lance sa ligne... Prochaine capture dans {wait_time//1000} secondes")
+    gacha_timer = root.after(wait_time, catch_fish)
+
+def catch_fish(cheat_mode=False):
+    global fishing_start_time
+    
+    if not gacha_active:
+        return
+    
+    print("Quelque chose mord a l'hamecon !")
+    
+    # Calculer le multiplicateur de chance basé sur le temps
+    import random
+    import time
+    current_time = time.time()
+    elapsed_time = min(current_time - fishing_start_time, 60)  # Max 60 secondes
+    chance_multiplier = (elapsed_time / 60) + 0.5
+    
+    # Déterminer le poisson attrapé
+    fish_data = calculate_fish_catch(chance_multiplier)
+    
+    # Afficher le résultat
+    display_catch(fish_data)
+    
+    # Mettre à jour la collection
+    update_collection(fish_data)
+    
+    # Programmer la prochaine pêche SEULEMENT si ce n'est pas la triche
+    if gacha_active and not cheat_mode:
+        schedule_next_fish()
+
+def calculate_fish_catch(chance_multiplier):
+    import random
+    
+    # Choisir la rareté
+    rarity = choose_rarity(chance_multiplier)
+    
+    # Choisir un poisson dans cette rareté
+    fish_list = FISH_DATABASE[rarity]
+    fish = random.choice(fish_list)
+    
+    # Vérifier si mutation
+    mutation_data = check_mutation(chance_multiplier)
+    
+    return {
+        "name": fish["name"],
+        "description": fish["description"],
+        "rarity": rarity,
+        "mutation": mutation_data["type"] if mutation_data else None,
+        "final_rarity": mutation_data["final_rarity"] if mutation_data else rarity,
+        "multiplier": mutation_data["multiplier"] if mutation_data else 1
+    }
+
+def choose_rarity(chance_multiplier):
+    import random
+    
+    # Ajuster les probabilités avec le multiplicateur
+    adjusted_chances = {}
+    total_chance = 0
+    
+    for rarity, base_chance in RARITY_CHANCES.items():
+        # Les rarités plus élevées bénéficient plus du multiplicateur
+        rarity_bonus = 1 + (chance_multiplier - 1) * (RARITY_CHANCES[rarity] / 100)
+        adjusted_chance = base_chance * rarity_bonus
+        adjusted_chances[rarity] = adjusted_chance
+        total_chance += adjusted_chance
+    
+    # Normaliser pour que le total soit 100
+    for rarity in adjusted_chances:
+        adjusted_chances[rarity] = (adjusted_chances[rarity] / total_chance) * 100
+    
+    # Choisir la rareté
+    roll = random.uniform(0, 100)
+    cumulative = 0
+    
+    for rarity, chance in adjusted_chances.items():
+        cumulative += chance
+        if roll <= cumulative:
+            return rarity
+    
+    return "Commun"  # Valeur par défaut
+
+def check_mutation(chance_multiplier):
+    import random
+    
+    # Chance de base de mutation : 5%
+    mutation_chance = 0.05 * chance_multiplier
+    
+    if random.random() < mutation_chance:
+        # Choisir une mutation
+        mutation_types = list(MUTATIONS.keys())
+        # Les mutations plus rares ont moins de chances
+        mutation_weights = [1, 0.8, 0.6, 0.3, 0.1]  # Du plus commun au plus rare
+        mutation = random.choices(mutation_types, weights=mutation_weights)[0]
+        
+        mutation_info = MUTATIONS[mutation]
+        
+        return {
+            "type": mutation,
+            "multiplier": mutation_info["multiplier"],
+            "final_rarity": get_mutated_rarity(mutation_info["multiplier"])
+        }
+    
+    return None
+
+def get_mutated_rarity(multiplier):
+    # Déterminer la nouvelle rareté basée sur le multiplicateur
+    if multiplier >= 20:
+        return "Légendaire"
+    elif multiplier >= 10:
+        return "Mythique"
+    elif multiplier >= 5:
+        return "Épique"
+    elif multiplier >= 3:
+        return "Rare"
+    elif multiplier >= 2:
+        return "Peu Commun"
+    else:
+        return "Commun"
+
+def display_catch(fish_data):
+    name = fish_data["name"]
+    rarity = fish_data["rarity"]
+    mutation = fish_data["mutation"]
+    final_rarity = fish_data["final_rarity"]
+    
+    # Arrêter l'aura précédente avant d'en créer une nouvelle
+    stop_aura()
+    
+    # Activer la nouvelle aura
+    start_aura(final_rarity)
+    
+    # Plus besoin de timer d'arrêt automatique
+    
+    if mutation:
+        mutation_info = MUTATIONS[mutation]
+        print(f"MUTATION RARE ! {mutation_info['message']}")
+        print(f"{name} {mutation} ({final_rarity} x {fish_data['multiplier']}) !")
+        
+        if final_rarity == "Légendaire":
+            print("Capture legendaire !")
+    else:
+        print(f"{name} ({rarity}) attrape !")
+    
+    print(f"{fish_data['description']}")
+
+def update_collection(fish_data):
+    global fish_collection
+    
+    fish_key = f"{fish_data['name']}"
+    if fish_data['mutation']:
+        fish_key += f" {fish_data['mutation']}"
+    
+    if fish_key not in fish_collection:
+        fish_collection[fish_key] = {
+            "count": 0,
+            "rarity": fish_data["final_rarity"],
+            "mutation": fish_data["mutation"]
+        }
+        print(f"Premier {fish_key} capture !")
+    
+    fish_collection[fish_key]["count"] += 1
+    
+    print("Collection mise a jour !")
+    
+    # Afficher les statistiques
+    total_fish = sum(item["count"] for item in fish_collection.values())
+    legendary_count = sum(item["count"] for item in fish_collection.values() if item["rarity"] == "Légendaire")
+    mutation_count = sum(item["count"] for item in fish_collection.values() if item["mutation"])
+    
+    print(f"Statistiques de peche :")
+    print(f"   Total : {total_fish} poissons")
+    print(f"   Legendaires : {legendary_count}")
+    print(f"   Mutations : {mutation_count}")
+    
+    if total_fish % 100 == 0:
+        print(f"{total_fish} poissons captures !")
+
+def animate_fishing():
+    global fishing_timer
+    
+    if fishing_mode:
+        draw_character()
+        # Redessiner toutes les 500ms pour l'animation
+        fishing_timer = root.after(500, animate_fishing)
+
+def on_click(event):
+    global dragging, drag_start_x, drag_start_y
+    # Vérifier si on clique sur le personnage (zones précises)
+    if photo_image:
+        # Si on a une image, utiliser une zone plus grande
+        if (x-125 <= event.x <= x+125 and y-125 <= event.y <= y+125):
+            dragging = True
+    else:
+        # Corps : rectangle autour du corps
+        if (x-10 <= event.x <= x+10 and y <= event.y <= y+25):
+            dragging = True
+        # Tête : cercle autour de la tête
+        elif ((event.x - x)**2 + (event.y - (y-7))**2 <= 64):  # rayon 8
+            dragging = True
+        # Chapeau : ellipse autour du chapeau
+        elif (x-10 <= event.x <= x+10 and y-20 <= event.y <= y-15):
+            dragging = True
+    
+    if dragging:
+        drag_start_x = event.x_root - root.winfo_x()
+        drag_start_y = event.y_root - root.winfo_y()
+
+def on_right_click(event):
+    # Clic droit pour charger une nouvelle image
+    load_image()
+    draw_character()
+
+
+def on_drag(event):
+    global dragging
+    if dragging:
+        new_x = event.x_root - drag_start_x
+        new_y = event.y_root - drag_start_y
+        
+        # Obtenir les dimensions de l'écran
+        screen_width = root.winfo_screenwidth()
+        screen_height = root.winfo_screenheight()
+        
+        # Limiter la position pour que la fenêtre ne sorte jamais complètement
+        # Garder au moins 30px visible
+        new_x = max(-270, min(screen_width - 30, new_x))
+        new_y = max(-270, min(screen_height - 30, new_y))
+        
+        root.geometry(f"300x300+{new_x}+{new_y}")
+
+def on_release(event):
+    global dragging
+    dragging = False
+
+def on_escape(event):
+    root.quit()
+
+def on_space(event):
+    toggle_fishing_mode()
+
+def on_c_key(event):
+    # Afficher la collection avec la touche C
+    show_collection()
+
+def on_t_key(event):
+    # Bouton de triche : pêcher instantanément
+    cheat_catch_fish()
+
+def cheat_catch_fish():
+    """Pêcher instantanément sans attendre le délai"""
+    global fishing_start_time, gacha_timer
+    
+    if not gacha_active:
+        print("Activez d'abord le mode peche avec espace !")
+        return
+    
+    print("🎣 TRICHE : Peche instantanee !")
+    
+    # Annuler le timer actuel
+    if gacha_timer:
+        root.after_cancel(gacha_timer)
+        gacha_timer = None
+    
+    # Pêcher immédiatement SANS relancer le timer automatique
+    # pour éviter les captures multiples
+    catch_fish(cheat_mode=True)
+
+def show_collection():
+    global fish_collection
+    
+    print("\n" + "="*50)
+    print("COLLECTION DE POISSONS")
+    print("="*50)
+    
+    if not fish_collection:
+        print("   Aucun poisson capturé pour le moment...")
+        print("   Activez le mode pêche avec la barre d'espace !")
+    else:
+        # Grouper par rareté
+        by_rarity = {}
+        for fish_key, data in fish_collection.items():
+            rarity = data["rarity"]
+            if rarity not in by_rarity:
+                by_rarity[rarity] = []
+            by_rarity[rarity].append((fish_key, data["count"]))
+        
+        # Afficher par rareté (de la plus rare à la plus commune)
+        rarity_order = ["Légendaire", "Mythique", "Épique", "Rare", "Peu Commun", "Commun"]
+        
+        for rarity in rarity_order:
+            if rarity in by_rarity:
+                print(f"\n{rarity} ({len(by_rarity[rarity])} types) :")
+                for fish_name, count in sorted(by_rarity[rarity]):
+                    print(f"   • {fish_name} : {count}")
+        
+        # Statistiques totales
+        total_fish = sum(item["count"] for item in fish_collection.values())
+        total_types = len(fish_collection)
+        legendary_count = sum(item["count"] for item in fish_collection.values() if item["rarity"] == "Légendaire")
+        mutation_count = sum(item["count"] for item in fish_collection.values() if item["mutation"])
+        
+        print(f"\nSTATISTIQUES GLOBALES :")
+        print(f"   Total de poissons : {total_fish}")
+        print(f"   Types differents : {total_types}/17")
+        print(f"   Legendaires : {legendary_count}")
+        print(f"   Mutations : {mutation_count}")
+        print(f"   Taux de legendaires : {(legendary_count/total_fish*100):.2f}%" if total_fish > 0 else "   Taux de legendaires : 0%")
+    
+    print("="*50 + "\n")
+
+# Événements
+canvas.bind("<Button-1>", on_click)
+canvas.bind("<ButtonRelease-1>", on_release)
+canvas.bind("<B1-Motion>", on_drag)
+canvas.bind("<Button-3>", on_right_click)  # Clic droit
+root.bind("<Escape>", on_escape)
+root.bind("<space>", on_space)  # Barre d'espace pour le mode pêche
+root.bind("c", on_c_key)  # Touche C pour voir la collection
+root.bind("C", on_c_key)  # Touche C majuscule aussi
+root.bind("t", on_t_key)  # Touche T pour la triche
+root.bind("T", on_t_key)  # Touche T majuscule aussi
+
+# Charger l'image au démarrage
+load_image()
+
+# Dessin initial
+draw_character()
+
+# Lancement automatique
+if __name__ == "__main__":
+    print("PET PECHEUR - SYSTEME GACHA")
+    print("="*40)
+    print("CONTROLES :")
+    print("   • Clic gauche + glisser : Deplacer le pet")
+    print("   • Clic droit : Changer d'image")
+    print("   • Barre d'espace : Activer/desactiver le mode peche")
+    print("   • Touche C : Afficher la collection")
+    print("   • Touche T : TRICHE - Peche instantanee !")
+    print("   • Echap : Quitter")
+    print("="*40)
+    print("SYSTEME GACHA :")
+    print("   • Temps de peche : 5-60 secondes aleatoires")
+    print("   • Plus vous attendez, plus de chance de rarete !")
+    print("   • 17 poissons + 5 types de mutations possibles")
+    print("   • Collection automatique avec statistiques")
+    print("="*40)
+    print("Pret a pecher ? Appuyez sur espace !")
+    print("(Ou T pour la triche instantanee)")
+    root.mainloop()
