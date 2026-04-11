@@ -1,811 +1,1261 @@
 import tkinter as tk
-from tkinter import Canvas, filedialog
+from tkinter import Canvas
 from PIL import Image, ImageTk
-import os
+import os, random, time, math, json
 
-# Créer une fenêtre tkinter avec fond transparent
+# ═══════════════════════════════════════════════════════════════════════════════
+# WINDOW
+# ═══════════════════════════════════════════════════════════════════════════════
 root = tk.Tk()
-root.overrideredirect(True)  # Pas de bordure
-root.attributes('-topmost', True)  # Toujours au-dessus
-root.attributes('-transparentcolor', 'black')  # Noir = transparent
-root.attributes('-alpha', 0.9)  # Légère transparence
-root.geometry("300x300+500+300")
+root.overrideredirect(True)
+root.attributes('-topmost', True)
+root.attributes('-transparentcolor', 'black')
+root.attributes('-alpha', 0.9)
+root.geometry("300x420+500+180")
 
-# Canvas pour dessiner
-canvas = Canvas(root, width=300, height=300, bg='black', highlightthickness=0)
+canvas = Canvas(root, width=300, height=420, bg='black', highlightthickness=0)
 canvas.pack()
 
-# Variables de position
-x, y = 150,150
-dragging = False
+# ═══════════════════════════════════════════════════════════════════════════════
+# DATA
+# ═══════════════════════════════════════════════════════════════════════════════
+FISH_DEFS = [
+    dict(name='Esturgeon gris',        rarity='Commun',      base_val=9,   min_sz=90,  max_sz=220,    img='esturgeon_gris.png'),
+    dict(name='Poisson-chat marbré',   rarity='Commun',      base_val=10,  min_sz=70,  max_sz=120,    img='poisson_chat_marbre.png'),
+    dict(name='Plie tachetée',         rarity='Commun',      base_val=10,  min_sz=25,  max_sz=70,     img='plie_tachetee.png'),
+    dict(name='Dorade verte',          rarity='Commun',      base_val=13,  min_sz=30,  max_sz=80,     img='dorade_verte.png'),
+
+    dict(name='Murene sombre',       rarity='Peu Commun',  base_val=35,  min_sz=70,  max_sz=200,    img='murene.png'),
+    dict(name='Barracuda argenté',     rarity='Peu Commun',  base_val=35,  min_sz=60,  max_sz=160,    img='barracuda_argenté.png'),
+    dict(name='Poisson-lion rayé',     rarity='Peu Commun',  base_val=38,  min_sz=20,  max_sz=55,     img='poisson_lion_rayé.png'),
+    dict(name='Poisson-ange noir',     rarity='Peu Commun',  base_val=39,  min_sz=15,  max_sz=40,     img='poisson-ange noir.png'),
+    dict(name='Pieuvre éléphant',      rarity='Peu Commun',  base_val=38,  min_sz=15,  max_sz=50,     img='pieuvre_elephant.png'),
+    dict(name='Crevette paon',         rarity='Peu Commun',  base_val=33,  min_sz=5,   max_sz=15,     img='crevette_paon.png'),
+
+    dict(name='Esturgeon luminescent', rarity='Rare',        base_val=60,  min_sz=180, max_sz=260,    img='esturgeon_luminescent.png'),
+    dict(name='Combattant solaire',    rarity='Rare',        base_val=67,  min_sz=8,   max_sz=25,     img='combattant_solaire.png'),
+    dict(name='Poisson-Lion néon',     rarity='Rare',        base_val=65,  min_sz=25,  max_sz=65,     img='poisson_lion_neon.png'),
+    dict(name='Piranha volcanique',      rarity='Rare',      base_val=69,  min_sz=20,  max_sz=55,     img='piranha_volcanique.png'),
+    dict(name='Cachalot des profondeurs',rarity='Rare',      base_val=67,  min_sz=900, max_sz=2200,   img='cachalot_des_profondeurs.png'),
+    dict(name='Poulpe des roches',     rarity='Rare',        base_val=65,  min_sz=40,  max_sz=140,    img='poulpe_des_roches.png'),
+    dict(name='Crabe araigne géant',   rarity='Rare',        base_val=63,  min_sz=40,  max_sz=150,    img='crabe_araigne_geant.png'),
+
+    dict(name='Carpe dorée sacrée',    rarity='Épique',      base_val=82,  min_sz=20,  max_sz=55,     img='carpe_dorée_sacrée.png'),
+    dict(name='Murene électrique',     rarity='Épique',      base_val=83,  min_sz=60,  max_sz=160,    img='murene_electrique.png'),
+    dict(name='Poisson mandala',       rarity='Épique',      base_val=83,  min_sz=15,  max_sz=40,     img='poisson_mandala.png'),
+    dict(name='Poisson celeste',       rarity='Épique',      base_val=80,  min_sz=70,  max_sz=200,    img='poisson_celeste.png'),
+    dict(name='Dragon algue',          rarity='Épique',      base_val=85,  min_sz=100, max_sz=300,    img='dragon_algue.png'),
+    dict(name='Requin baleine',        rarity='Épique',      base_val=84,  min_sz=550, max_sz=1400,   img='requin_baleine.png'),
+    dict(name='Pteropode phantome',    rarity='Épique',      base_val=81,  min_sz=5,   max_sz=20,     img='pteropode_phantome.png'),
+    dict(name='Crabe yeti',            rarity='Épique',      base_val=80,  min_sz=30,  max_sz=100,    img='crabe_yeti.png'),
+
+    dict(name='Hippocampe doré',       rarity='Légendaire',  base_val=99,  min_sz=12,  max_sz=45,     img='hippocampe_dore.png'),
+    dict(name='Dragon des brumes',     rarity='Légendaire',  base_val=101, min_sz=250, max_sz=700,    img='dragon_des_brumes.png'),
+    dict(name='Dragon des marées',     rarity='Légendaire',  base_val=101, min_sz=500, max_sz=900,    img='dragon_des_marees.png'),
+    dict(name='Baleine runique',       rarity='Légendaire',  base_val=103, min_sz=800, max_sz=1800,   img='baleine_runique.png'),
+    dict(name='Kraken abyssal',        rarity='Légendaire',  base_val=105, min_sz=600, max_sz=1600,   img='kraken_abyssal.png'),
+    dict(name='Grand requin blanc',    rarity='Légendaire',  base_val=101, min_sz=280, max_sz=700,    img='grand_requin_blanc.png'),
+    dict(name='Requin lutin rose',     rarity='Légendaire',  base_val=100, min_sz=30,  max_sz=90,     img='requin_lutin_rose.png'),
+    dict(name='Calamar vampire',       rarity='Légendaire',  base_val=102, min_sz=50,  max_sz=150,    img='calamar_vampire.png'),
+
+    dict(name='Requin baleine primordial',rarity='Mythique',    base_val=101, min_sz=350, max_sz=1000,   img='requin_baleine_primordial.png'),
+    dict(name='Hippocampe licorne',    rarity='Mythique',    base_val=101,  min_sz=400,  max_sz=1200, img='hippocampe_licorne.png'),
+    dict(name='Murene antique runique',rarity='Mythique',  base_val=103,  min_sz=300,  max_sz=900,  img='murene_antique_runique.png'),
+
+    dict(name='Leviathan cosmique',    rarity='LEVIATHAN',    base_val=1000, min_sz=12500,  max_sz=15000, img='leviathan_cosmique.png'),
+    dict(name='Leviathan spirituel',    rarity='LEVIATHAN',    base_val=1000, min_sz=12500,  max_sz=15000, img='leviathan_spirituel.png'),
+    dict(name='Leviathan primordial',    rarity='LEVIATHAN',    base_val=1000, min_sz=12500,  max_sz=15000, img='leviathan_primordial.png'),
+]
+
+ROD_TIERS = [
+    dict(name='Canne de Base', price=0,    peu_c_b=0, rare_b=0,  epic_b=0, leg_b=0  ,myt_b=0),
+    dict(name='Bonne Canne',   price=200,  peu_c_b=1, rare_b=8,  epic_b=3, leg_b=2  ,myt_b=1),
+    dict(name='Canne Pro',     price=800,  peu_c_b=2, rare_b=18, epic_b=7, leg_b=3  ,myt_b=2),
+    dict(name='Canne Maître',  price=2500, peu_c_b=3, rare_b=35, epic_b=18, leg_b=8  ,myt_b=4),
+]
+
+RARITY_COLOR = {
+    'Commun':     '#AAAAAA',
+    'Peu Commun': "#00DF0B",
+    'Rare':       '#4169E1',
+    'Épique':     "#AB27DB",
+    'Légendaire': '#FFD700',
+    'Mythique':   '#FF8800',
+    'LEVIATHAN':   "#E02ADD",
+}
+
+AURA_COLOR = {
+    'Commun':     '#808080',
+    'Peu Commun': "#057C63",
+    'Rare':       '#1E90FF',
+    'Épique':     '#FF00FF',
+    'Légendaire': '#FFD700',
+    'Mythique':   '#FF4500',
+    'LEVIATHAN':   "#52045B",
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FISH IMAGES
+# ═══════════════════════════════════════════════════════════════════════════════
+FISH_IMAGES    = {}   # name -> PhotoImage 64×64  (catch display)
+FISH_IMAGES_SM = {}   # name -> PhotoImage 64×64  (inventory rows)
+FISH_IMAGES_MD = {}   # name -> PhotoImage 64×64  (catalogue cards)
+_ROT_FRAMES    = {}   # name -> [PhotoImage, ...]  (spin animation)
+LOCKED_IMAGE   = None # PhotoImage for undiscovered catalogue cards
+
+
+def _fit_square(pil_img, size):
+    """Resize image to fit within a square of `size` pixels, preserving aspect ratio, with transparent padding."""
+    img = pil_img.convert('RGBA')
+    img.thumbnail((size, size), Image.Resampling.LANCZOS)
+    bg = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    bg.paste(img, ((size - img.width) // 2, (size - img.height) // 2))
+    return bg
+
+
+def _make_spin_frames(pil_img, size=64, n=16):
+    """Y-axis flip simulation: squish horizontally."""
+    frames = []
+    base = _fit_square(pil_img.convert('RGBA'), size)
+    flip = base.transpose(Image.FLIP_LEFT_RIGHT)
+    for i in range(n):
+        scale_x = math.cos(i * 2 * math.pi / n)
+        src     = base if scale_x >= 0 else flip
+        w2      = max(2, int(abs(scale_x) * size))
+        sq      = src.resize((w2, size), Image.Resampling.LANCZOS)
+        bg      = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        bg.paste(sq, ((size - w2) // 2, 0))
+        frames.append(ImageTk.PhotoImage(bg))
+    return frames
+
+
+def load_fish_images():
+    """Load each fish image from images/ subfolder using the img field in FISH_DEFS."""
+    global LOCKED_IMAGE
+    img_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images')
+    # Load locked placeholder
+    try:
+        pil_lock = Image.open(os.path.join(img_dir, 'locked.png')).convert('RGBA')
+        LOCKED_IMAGE = ImageTk.PhotoImage(_fit_square(pil_lock, 64))
+    except Exception as e:
+        print(f"Image locked.png manquante: {e}")
+    # Load fish images
+    for defn in FISH_DEFS:
+        name  = defn['name']
+        fpath = os.path.join(img_dir, defn['img'])
+        try:
+            pil = Image.open(fpath).convert('RGBA')
+        except Exception as e:
+            print(f"Image manquante pour {name}: {e}")
+            continue
+        FISH_IMAGES[name]    = ImageTk.PhotoImage(_fit_square(pil, 64))
+        FISH_IMAGES_SM[name] = ImageTk.PhotoImage(_fit_square(pil, 64))
+        FISH_IMAGES_MD[name] = ImageTk.PhotoImage(_fit_square(pil, 64))
+        _ROT_FRAMES[name]    = _make_spin_frames(pil, size=92, n=16)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GAME STATE
+# ═══════════════════════════════════════════════════════════════════════════════
+coins              = 0
+inventory          = []
+inv_capacity       = 10
+rod_tier           = 0
+luck_level         = 0
+auto_fish_unlocked = False
+auto_fish_active   = False
+
+fishing_mode       = False
+fishing_start_time = 0.0
+fish_duration      = 0.0
+gacha_timer        = None
+fishing_anim_id    = None
+
+catalogue = {d['name']: {'count': 0, 'best': None} for d in FISH_DEFS}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SAVE / LOAD
+# ═══════════════════════════════════════════════════════════════════════════════
+SAVE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'save.json')
+
+
+def save_game():
+    data = {
+        'coins':              coins,
+        'inventory':          inventory,
+        'inv_capacity':       inv_capacity,
+        'rod_tier':           rod_tier,
+        'luck_level':         luck_level,
+        'auto_fish_unlocked': auto_fish_unlocked,
+        'catalogue':          catalogue,
+    }
+    try:
+        with open(SAVE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erreur sauvegarde : {e}")
+
+
+def load_game():
+    global coins, inventory, inv_capacity, rod_tier, luck_level, auto_fish_unlocked, catalogue
+    if not os.path.exists(SAVE_PATH):
+        return
+    try:
+        with open(SAVE_PATH, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        coins              = data.get('coins', 0)
+        inventory          = data.get('inventory', [])
+        inv_capacity       = data.get('inv_capacity', 10)
+        rod_tier           = data.get('rod_tier', 0)
+        luck_level         = data.get('luck_level', 0)
+        auto_fish_unlocked = data.get('auto_fish_unlocked', False)
+        saved_cat          = data.get('catalogue', {})
+        for name in catalogue:
+            if name in saved_cat:
+                catalogue[name] = saved_cat[name]
+        print("Sauvegarde chargée.")
+    except Exception as e:
+        print(f"Erreur chargement sauvegarde : {e}")
+
+
+x, y         = 150, 270
+dragging     = False
+did_drag     = False
 drag_start_x = 0
 drag_start_y = 0
 
-# Variables pour l'image
 character_image = None
-photo_image = None
-rotated_photo_image = None
+photo_image     = None
 
-# Variables pour le mode pêche
-fishing_mode = False
-fishing_rod = None
-fish = None
-fishing_timer = None
+_shop_win = None
+_inv_win  = None
+_cat_win  = None
 
-# Variables pour le système gacha
-gacha_active = False
-next_fish_time = 0
-fish_collection = {}
-fishing_start_time = 0
-gacha_timer = None
+_overlay_ids   = []
+_overlay_timer = None
 
-# Variables pour le système d'aura
-animations = {}  # Dictionnaire pour stocker toutes les animations actives
-next_animation_id = 1  # ID unique pour chaque animation
+_catch_display = None   # active CatchDisplay instance
 
-# Liste des poissons par rareté
-FISH_DATABASE = {
-    "Commun": [
-        {"name": "Carpe argentée", "description": "Une carpe brillante"},
-        {"name": "Gardon rouge", "description": "Petit poisson vif"},
-        {"name": "Truite des ruisseaux", "description": "Poisson d'eau douce"},
-        {"name": "Perche commune", "description": "Prédateur des lacs"},
-        {"name": "Brochet miniature", "description": "Petit chasseur"}
-    ],
-    "Peu Commun": [
-        {"name": "Saumon sauvage", "description": "Poisson migrateur"},
-        {"name": "Anguille électrique", "description": "Poisson surprenant"},
-        {"name": "Bar de mer", "description": "Poisson côtier"},
-        {"name": "Dorade rosée", "description": "Poisson des récifs"}
-    ],
-    "Rare": [
-        {"name": "Thon rouge", "description": "Géant des océans"},
-        {"name": "Requin-citron", "description": "Prédateur tropical"},
-        {"name": "Espadon majestueux", "description": "Noble guerrier des mers"}
-    ],
-    "Épique": [
-        {"name": "Cachalot ancien", "description": "Seigneur des profondeurs"},
-        {"name": "Raie manta géante", "description": "Danseuse des océans"}
-    ],
-    "Mythique": [
-        {"name": "Kraken adolescent", "description": "Tentacules mystérieux"},
-        {"name": "Leviathan des abysses", "description": "Monstre marin légendaire"}
-    ],
-    "Légendaire": [
-        {"name": "Poseidon's Blessing", "description": "Poisson divin unique"}
-    ]
-}
+# ═══════════════════════════════════════════════════════════════════════════════
+# PARTICLE ANIMATIONS  (original system)
+# ═══════════════════════════════════════════════════════════════════════════════
+animations        = {}
+next_animation_id = 1
 
-# Types de mutations
-MUTATIONS = {
-    "Chromatique": {"multiplier": 2, "emoji": "🌈", "message": "Mutation Chromatique !"},
-    "Bioluninescent": {"multiplier": 3, "emoji": "💫", "message": "Mutation Bioluninescente !"},
-    "Abyssal": {"multiplier": 5, "emoji": "🌑", "message": "Mutation Abyssale !"},
-    "Cosmique": {"multiplier": 10, "emoji": "🌌", "message": "Mutation Cosmique !"},
-    "Divin": {"multiplier": 20, "emoji": "✨", "message": "Mutation Divine !"}
-}
 
-# Probabilités de base
-RARITY_CHANCES = {
-    "Commun": 41,
-    "Peu Commun": 25,
-    "Rare": 20,
-    "Épique": 10,
-    "Mythique": 3,
-    "Légendaire": 1
-}
-
-# Couleurs d'aura selon la rareté (plus visibles pour les rares)
-AURA_COLORS = {
-    "Commun": "#808080",      # Gris
-    "Peu Commun": "#90EE90",  # Vert clair
-    "Rare": "#1E90FF",        # Bleu vif (plus visible)
-    "Épique": "#FF00FF",        # Cyan vif (très visible)
-    "Mythique": "#FF1493",      # Rouge vif (très visible)
-    "Légendaire": "#FFD700",   # Or (très visible)
-}
-
-# Configuration de l'animation parfaite
 class AnimationConfig:
     def __init__(self):
-        # DISPOSITION
-        self.cone_width = 120           # Largeur du cône
-        self.base_radius = 40           # Rayon de base
-        self.point_radius = 2           # Rayon de la pointe
-        self.particle_count = 25         # Nombre de particules
-        
-        # TAILLE
-        self.min_size = 3                # Taille minimale
-        self.max_size = 8                # Taille maximale
-        
-        # VITESSE
-        self.vx_min = -0.8              # Vitesse X minimale
-        self.vx_max = 0.8               # Vitesse X maximale
-        self.vy_min = -0.1              # Vitesse Y minimale
-        self.vy_max = 0.1               # Vitesse Y maximale
-        self.gravity = 0.001             # Gravité
-        
-        # DURÉE
-        self.life_duration = 250         # Durée de vie en frames (20 secondes)
-        
-        # TRANSPARENCE
+        self.cone_width     = 120
+        self.base_radius    = 40
+        self.point_radius   = 2
+        self.particle_count = 25
+        self.min_size       = 3
+        self.max_size       = 8
+        self.vx_min         = -0.8
+        self.vx_max         =  0.8
+        self.vy_min         = -0.1
+        self.vy_max         =  0.1
+        self.gravity        =  0.001
+        self.life_duration  = 250
         self.stages = [
-            {"life": 176, "stipple": "gray75"},  # 88% de vie (16s)
-            {"life": 128, "stipple": "gray50"},   # 64% de vie (10s)
-            {"life": 80, "stipple": "gray25"},   # 40% de vie (6s)
-            {"life": 32, "shrink": True}        # 16% de vie (5s)
+            {"life": 176, "stipple": "gray75"},
+            {"life": 128, "stipple": "gray50"},
+            {"life":  80, "stipple": "gray25"},
+            {"life":  32, "shrink":  True},
         ]
 
-# Instance de configuration globale
+
 animation_config = AnimationConfig()
 
+
 class PerfectAnimation:
-    def __init__(self, animation_id, color, x, y, config):
-        self.id = animation_id
-        self.color = color
-        self.x = x
-        self.y = y
-        self.config = config
+    def __init__(self, animation_id, color, ax, ay, config):
+        self.id        = animation_id
+        self.color     = color
+        self.x         = ax
+        self.y         = ay
+        self.config    = config
         self.particles = []
-        self.timer = None
-        self.active = True
-        self.create_particles()
-    
-    def create_particles(self):
-        """Créer les particules selon la configuration"""
-        import random
-        import math
-        
+        self.timer     = None
+        self.active    = True
+        self._create_particles()
+
+    def _create_particles(self):
         for i in range(self.config.particle_count):
-            # Position sur la largeur du cône
-            width_ratio = (i / self.config.particle_count) - 0.5
-            
-            # Rayon à cette position (plus grand au centre, plus petit sur les bords)
-            current_radius = self.config.base_radius * (1 - abs(width_ratio) * 1.5)
-            if current_radius < self.config.point_radius:
-                current_radius = self.config.point_radius
-            
-            # Position X et Y
-            current_x = self.x + (width_ratio * self.config.cone_width)
-            current_y = self.y + random.randint(-10, 10)
-            
-            # Vitesse selon la position
-            if width_ratio < 0:
-                vx = random.uniform(self.config.vx_min, self.config.vx_min/2)
-            elif width_ratio > 0:
-                vx = random.uniform(self.config.vx_max/2, self.config.vx_max)
+            wr = (i / self.config.particle_count) - 0.5
+            cr = self.config.base_radius * (1 - abs(wr) * 1.5)
+            if cr < self.config.point_radius:
+                cr = self.config.point_radius
+            cx2 = self.x + wr * self.config.cone_width
+            cy2 = self.y + random.randint(-10, 10)
+            if wr < 0:
+                vx = random.uniform(self.config.vx_min, self.config.vx_min / 2)
+            elif wr > 0:
+                vx = random.uniform(self.config.vx_max / 2, self.config.vx_max)
             else:
-                vx = random.uniform(self.config.vx_min/3, self.config.vx_max/3)
-            
-            vy = random.uniform(self.config.vy_min, self.config.vy_max)
-            
-            # Taille de particule (plus grandes au centre)
-            size = random.randint(self.config.min_size, self.config.max_size) * (1 - abs(width_ratio))
+                vx = random.uniform(self.config.vx_min / 3, self.config.vx_max / 3)
+            vy      = random.uniform(self.config.vy_min, self.config.vy_max)
+            size    = random.randint(self.config.min_size, self.config.max_size) * (1 - abs(wr))
             if size < 1:
                 size = 1
-            
-            # Transparence selon la position
-            if abs(width_ratio) < 0.2:
-                stipple = 'gray25'  # Centre : plus opaque
-            elif abs(width_ratio) < 0.4:
-                stipple = 'gray50'  # Milieu : moyennement transparent
-            else:
-                stipple = 'gray75'  # Bords : plus transparent
-            
-            particle = canvas.create_oval(
-                current_x - size, current_y - size,
-                current_x + size, current_y + size,
-                fill=self.color,
-                outline='',
-                stipple=stipple
-            )
-            
+            stipple = 'gray25' if abs(wr) < 0.2 else ('gray50' if abs(wr) < 0.4 else 'gray75')
+            pid = canvas.create_oval(cx2 - size, cy2 - size, cx2 + size, cy2 + size,
+                                     fill=self.color, outline='', stipple=stipple)
             self.particles.append({
-                "id": particle,
-                "type": "cone_dispersed",
-                "x": current_x,
-                "y": current_y,
-                "vx": vx,
-                "vy": vy,
-                "size": size,
-                "base_size": size,
-                "life": self.config.life_duration,
-                "max_life": self.config.life_duration
+                'id': pid, 'type': 'cone_dispersed',
+                'x': cx2, 'y': cy2, 'vx': vx, 'vy': vy,
+                'size': size, 'base_size': size,
+                'life': self.config.life_duration,
+                'max_life': self.config.life_duration,
             })
 
     def animate(self):
-        """Animer cette animation spécifique avec disparition FEDP parfaite"""
         if not self.active:
             return
-        
-        import math
-        particles_to_remove = []
-        
-        for particle in self.particles:
-            particle["life"] -= 1
-            
-            if particle["life"] <= 0:
-                if isinstance(particle["id"], list):
-                    for item in particle["id"]:
-                        canvas.delete(item)
-                else:
-                    canvas.delete(particle["id"])
-                particles_to_remove.append(particle)
+        to_remove = []
+        for p in self.particles:
+            p['life'] -= 1
+            if p['life'] <= 0:
+                canvas.delete(p['id'])
+                to_remove.append(p)
             else:
-                if particle["type"] == "cone_dispersed":
-                    # Mouvement
-                    particle["x"] += particle["vx"]
-                    particle["y"] += particle["vy"]
-                    particle["vy"] += self.config.gravity
-                    
-                    # Taille dynamique (FEDP)
-                    life_ratio = particle["life"] / particle["max_life"]
-                    
-                    # Calculer la taille selon les étapes
-                    size = particle["base_size"] * life_ratio
-                    
-                    # Appliquer les étapes de transparence et de grossissement
-                    for stage in self.config.stages:
-                        if particle["life"] < stage["life"]:
-                            if "stipple" in stage:
-                                canvas.itemconfig(particle["id"], stipple=stage["stipple"])
-                            elif "shrink" in stage:
-                                # Grossissement exponentiel à la fin
-                                size = particle["base_size"] * (0.3 + life_ratio * 0.7)
-                            break
-                    
-                    canvas.coords(
-                        particle["id"],
-                        particle["x"] - size, particle["y"] - size,
-                        particle["x"] + size, particle["y"] + size
-                    )
-                
-                elif particle["type"] == "fountain":
-                    particle["x"] += particle["vx"]
-                    particle["y"] += particle["vy"]
-                    particle["vy"] += 0.12
-                    
-                    canvas.coords(
-                        particle["id"],
-                        particle["x"] - particle["size"], particle["y"] - particle["size"],
-                        particle["x"] + particle["size"], particle["y"] + particle["size"]
-                    )
-                
-                elif particle["type"] == "circle":
-                    particle["radius"] += particle["growth_speed"]
-                    
-                    # Transparence qui augmente vers la fin (disparition progressive sur 10 secondes)
-                    if particle["life"] < 80:
-                        canvas.itemconfig(particle["id"], stipple='gray75')
-                    if particle["life"] < 30:
-                        canvas.itemconfig(particle["id"], stipple='gray25')
-                    
-                    canvas.coords(
-                        particle["id"],
-                        particle["x"] - particle["radius"], particle["y"] - particle["radius"],
-                        particle["x"] + particle["radius"], particle["y"] + particle["radius"]
-                    )
-        
-        for particle in particles_to_remove:
-            self.particles.remove(particle)
-        
-        if self.active and len(self.particles) > 0:
+                p['x']  += p['vx']
+                p['y']  += p['vy']
+                p['vy'] += self.config.gravity
+                lr   = p['life'] / p['max_life']
+                size = p['base_size'] * lr
+                for stage in self.config.stages:
+                    if p['life'] < stage['life']:
+                        if 'stipple' in stage:
+                            canvas.itemconfig(p['id'], stipple=stage['stipple'])
+                        elif 'shrink' in stage:
+                            size = p['base_size'] * (0.3 + lr * 0.7)
+                        break
+                canvas.coords(p['id'], p['x'] - size, p['y'] - size,
+                              p['x'] + size, p['y'] + size)
+        for p in to_remove:
+            self.particles.remove(p)
+        if self.active and self.particles:
             self.timer = root.after(80, self.animate)
-        elif len(self.particles) == 0:
+        elif not self.particles:
             self.stop()
-    
+
     def stop(self):
-        """Arrêter cette animation spécifique"""
         self.active = False
         if self.timer:
             root.after_cancel(self.timer)
-        
-        for particle in self.particles:
-            if isinstance(particle["id"], list):
-                for item in particle["id"]:
-                    canvas.delete(item)
-            else:
-                canvas.delete(particle["id"])
-        
+        for p in self.particles:
+            canvas.delete(p['id'])
         if self.id in animations:
             del animations[self.id]
 
-def load_image():
-    global character_image, photo_image
-    # Essayer de charger l'image du chat automatiquement
-    try:
-        if os.path.exists("pet_image.png"):
-            character_image = Image.open("pet_image.png")
-            character_image = character_image.resize((250, 250), Image.Resampling.LANCZOS)
-            photo_image = ImageTk.PhotoImage(character_image)
-            print("Image du chat chargée avec succès!")
-            return True
-    except Exception as e:
-        print(f"Erreur lors du chargement de l'image du chat: {e}")
-    
-    # Si l'image n'existe pas, demander à l'utilisateur
-    file_path = filedialog.askopenfilename(
-        title="Choisir une image pour le personnage",
-        filetypes=[("Images", "*.png *.jpg *.jpeg *.gif *.bmp"), ("Tous les fichiers", "*.*")]
-    )
-    
-    if file_path:
-        try:
-            character_image = Image.open(file_path)
-            character_image = character_image.resize((250, 250), Image.Resampling.LANCZOS)
-            photo_image = ImageTk.PhotoImage(character_image)
-            print("Image chargée avec succès!")
-            return True
-        except Exception as e:
-            print(f"Erreur lors du chargement de l'image: {e}")
-            return False
-    return False
-
-def draw_character():
-    canvas.delete("all")
-    
-    if photo_image:
-        # Dessiner l'image chargée (normale)
-        canvas.create_image(x, y, image=photo_image)
-    else:
-        # Dessiner le personnage par défaut
-        # Corps
-        canvas.create_rectangle(x-10, y, x+10, y+25, fill='#4A90E2', outline='')
-        # Tête
-        canvas.create_oval(x-8, y-15, x+8, y, fill='#FDBCB4', outline='')
-        # Chapeau
-        canvas.create_oval(x-10, y-20, x+10, y-15, fill='#8B4513', outline='')
-        # Yeux
-        canvas.create_oval(x-3, y-12, x-1, y-10, fill='black', outline='')
-        canvas.create_oval(x+1, y-12, x+3, y-10, fill='black', outline='')
-        # Sourire
-        canvas.create_arc(x-4, y-10, x+4, y-6, start=0, extent=180, style='arc', outline='black', width=1)
-    
-    # L'aura est gérée par l'animation séparément
 
 def start_aura(rarity):
-    """Démarrer l'animation parfaite"""
-    global next_animation_id, animations
-    
-    # Créer l'animation parfaite
-    animation = PerfectAnimation(next_animation_id, 
-                               AURA_COLORS.get(rarity, "#808080"), x, y, 
-                               animation_config)
-    animations[next_animation_id] = animation
-    
-    # Démarrer l'animation (la méthode animate() gère la boucle elle-même)
-    animation.animate()
-    
-    print(f"Aura {rarity.lower()} (parfaite) activee !")
-    
+    global next_animation_id
+    stop_aura()
+    anim = PerfectAnimation(next_animation_id,
+                            AURA_COLOR.get(rarity, '#808080'),
+                            x, y, animation_config)
+    animations[next_animation_id] = anim
+    anim.animate()
     next_animation_id += 1
 
-def stop_aura(animation_id=None):
-    """Arrêter une animation spécifique ou toutes les animations"""
-    global animations
-    
-    if animation_id:
-        # Arrêter une animation spécifique
-        if animation_id in animations:
-            animations[animation_id].stop()
-            print(f"Animation {animation_id} arrêtée")
-    else:
-        # Arrêter toutes les animations
-        ids_to_stop = list(animations.keys())
-        for anim_id in ids_to_stop:
-            animations[anim_id].stop()
-        print("Toutes les animations arrêtées")
+
+def stop_aura():
+    for aid in list(animations.keys()):
+        animations[aid].stop()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CATCH DISPLAY  (spinning fish + glow + info card above character)
+# ═══════════════════════════════════════════════════════════════════════════════
+class CatchDisplay:
+    DURATION_MS = 4500  # total display time
+
+    def __init__(self, fish):
+        self.fish       = fish
+        self.items      = []
+        self.frame_idx  = 0
+        self.tick       = 0
+        self.timer      = None
+        self.active     = True
+        self.frames     = _ROT_FRAMES.get(fish['name'], [])
+        self._step()
+        root.after(self.DURATION_MS, self.stop)
+
+    def _step(self):
+        if not self.active:
+            return
+
+        # clear previous frame items
+        for cid in self.items:
+            canvas.delete(cid)
+        self.items = []
+
+        rc   = RARITY_COLOR.get(self.fish['rarity'], '#AAAAAA')
+        cx2  = x
+        cy2  = y - 195   # above character
+
+        # ── pulsing glow rings ──
+        pulse = abs(math.sin(self.tick * 0.25))
+        for r_off, stip in [(46, 'gray12'), (38, 'gray25'), (30, 'gray50')]:
+            rr = r_off + int(pulse * 4)
+            self.items.append(
+                canvas.create_oval(cx2-rr, cy2-rr, cx2+rr, cy2+rr,
+                                   fill=rc, outline='', stipple=stip)
+            )
+
+        # shiny sparkles orbiting
+        if self.fish.get('shiny'):
+            for k in range(6):
+                ang = math.radians(self.tick * 12 + k * 60)
+                sx  = cx2 + int(42 * math.cos(ang))
+                sy  = cy2 + int(42 * math.sin(ang))
+                self.items.append(canvas.create_oval(sx-3, sy-3, sx+3, sy+3,
+                                                     fill='#FFEE44', outline=''))
+
+        # spinning fish image
+        if self.frames:
+            frame = self.frames[self.frame_idx % len(self.frames)]
+            self.items.append(canvas.create_image(cx2, cy2, image=frame))
+            self.frame_idx += 1
+        else:
+            # fallback: colored rectangle
+            self.items.append(canvas.create_rectangle(cx2-28, cy2-28, cx2+28, cy2+28,
+                                                       fill=rc, outline=''))
+
+        # ── info card ──
+        mods = []
+        if self.fish.get('shiny'):   mods.append('✦ SHINY')
+        if self.fish.get('antique'): mods.append('ANTIQUE')
+        if self.fish.get('abyssal'): mods.append('ABYSSAL')
+        if self.fish.get('albinos'): mods.append('ALBINOS')
+        if self.fish.get('malade'):  mods.append('MALADE')
+        mod_line = '  '.join(mods)
+
+        lines = [self.fish['name']]
+        lines.append(f"{self.fish['size']} cm")
+        if mod_line:
+            lines.append(mod_line)
+        lines.append(f"{self.fish['value']} or")
+        text = '\n'.join(lines)
+
+        n_lines = len(lines)
+        bh      = 14 * n_lines + 10
+        tx, ty  = cx2, cy2 + 45
+        self.items.append(
+            canvas.create_rectangle(tx-68, ty-4, tx+68, ty+bh,
+                                    fill='#0A0A18', outline=rc, width=2)
+        )
+        self.items.append(
+            canvas.create_text(tx, ty + bh//2 - 2, text=text, fill=rc,
+                               font=('Arial', 8, 'bold'), justify='center')
+        )
+
+        self.tick  += 1
+        self.timer  = root.after(70, self._step)
+
+    def stop(self):
+        self.active = False
+        if self.timer:
+            root.after_cancel(self.timer)
+        for cid in self.items:
+            canvas.delete(cid)
+        self.items = []
+        global _catch_display
+        if _catch_display is self:
+            _catch_display = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# IMAGE & CHARACTER
+# ═══════════════════════════════════════════════════════════════════════════════
+def load_image():
+    global character_image, photo_image
+    img_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'images', 'image.png')
+    try:
+        character_image = Image.open(img_path).resize((250, 250), Image.Resampling.LANCZOS)
+        photo_image     = ImageTk.PhotoImage(character_image)
+        return True
+    except Exception as e:
+        print(f"Erreur image personnage: {e}")
+    return False
+
+
+def draw_character():
+    canvas.delete("char")
+    if photo_image:
+        canvas.create_image(x, y, image=photo_image, tags="char")
+
+    # Auto-fish indicator (cyan  dot)
+    if auto_fish_active:
+        canvas.create_oval(x+80, y-110, x+96, y-94,
+                           fill='#00CCFF', outline='', tags="char")
+
+
 
 def draw_fishing_gear():
-    global fishing_rod, fish
-    
-    # Canne à pêche
-    fishing_rod = canvas.create_line(x+30, y-50, x+80, y+20, fill='#8B4513', width=3)
-    
-    # Ligne de pêche
-    canvas.create_line(x+80, y+20, x+85, y+60, fill='gray', width=1)
-    
-    # Poisson (bougeant)
-    import random
-    fish_offset = random.randint(-5, 5)
-    fish = canvas.create_oval(x+75+fish_offset, y+55, x+95+fish_offset, y+70, fill='#FFA500', outline='black')
-    
-    # Bulles
+    canvas.delete("rod")
     for i in range(3):
-        bubble_y = y+80 + i*15
-        bubble_x = x+85 + random.randint(-10, 10)
-        canvas.create_oval(bubble_x-3, bubble_y-3, bubble_x+3, bubble_y+3, fill='lightblue', outline='blue')
+        by2 = y + 80 + i * 15
+        bx2 = x + 80 + random.randint(-10, 10)
+        canvas.create_oval(bx2-3, by2-3, bx2+3, by2+3,
+                           fill='darkblue', outline='blue', tags="rod")
 
-def toggle_fishing_mode():
-    global fishing_mode, fishing_timer, gacha_active, gacha_timer, fishing_start_time
-    
-    fishing_mode = not fishing_mode
-    
-    if fishing_mode:
-        print("Mode peche ACTIVE - Le pet commence a pecher...")
-        # Démarrer le système gacha
-        start_gacha_system()
-        # Démarrer l'animation de pêche
-        animate_fishing()
-    else:
-        print("Mode normal - Le pet arrete de pecher")
-        # Arrêter le système gacha
-        stop_gacha_system()
-        # Arrêter l'animation
-        if fishing_timer:
-            root.after_cancel(fishing_timer)
 
-def start_gacha_system():
-    global gacha_active, fishing_start_time, gacha_timer
-    import time
-    gacha_active = True
+# ═══════════════════════════════════════════════════════════════════════════════
+# RNG
+# ═══════════════════════════════════════════════════════════════════════════════
+def base_luck():
+    return luck_level * 5
+
+
+def roll_fish(luck_bonus):
+    rod     = ROD_TIERS[rod_tier]
+    lk      = min(luck_bonus, 50)
+    peu_c_w = 40 + rod['peu_c_b'] + lk * 0.30
+    rare_w  = 25 + rod['rare_b'] + lk * 0.20
+    epic_w  = 10 + rod['epic_b'] + lk * 0.15
+    leg_w   =  5 + rod['leg_b']  + lk * 0.10
+    myt_w   =  3 + rod['myt_b']  + lk * 0.10
+    lev_w  =  0.5 + lk * 0.08
+    other   = peu_c_w + rare_w + epic_w + leg_w + myt_w + lev_w
+    comm_w  = max(60.0, (2/3) * other)
+
+    rarity = random.choices(
+        ['Commun', 'Peu Commun', 'Rare', 'Épique', 'Légendaire', 'Mythique', 'LEVIATHAN'],
+        weights=[comm_w, peu_c_w, rare_w, epic_w, leg_w, myt_w, lev_w], k=1
+    )[0]
+
+    # Pick a fish of that rarity, with fallback to any rarity if pool is empty
+    pool = [f for f in FISH_DEFS if f['rarity'] == rarity]
+    if not pool:
+        pool = FISH_DEFS
+    defn    = random.choice(pool)
+    size    = round(random.uniform(defn['min_sz'], defn['max_sz']), 1)
+    shiny   = random.random() < 0.01
+    antique = random.random() < 0.03
+    abyssal = random.random() < 0.05
+    albinos = random.random() < 0.1
+    malade  = random.random() < 0.02
+    value   = int(
+        defn['base_val']
+        * (0.5 + size / defn['max_sz'])
+        * (10 if shiny   else 1)
+        * (5  if antique else 1)
+        * (2  if abyssal else 1)
+        * (1.5  if albinos else 1)
+        * (0.8  if malade else 1)
+    )
+    return dict(name=defn['name'], rarity=rarity, size=size,
+                shiny=shiny, antique=antique, abyssal=abyssal, value=value)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# FISHING
+# ═══════════════════════════════════════════════════════════════════════════════
+def _start_cast():
+    """Internal: begin one fishing cast (used by both manual and auto modes)."""
+    global fishing_mode, fishing_start_time, fish_duration, gacha_timer
+    fishing_mode       = True
     fishing_start_time = time.time()
-    schedule_next_fish()
+    fish_duration      = random.uniform(10, 50)
+    gacha_timer        = root.after(int(fish_duration * 1000), do_catch)
+    _animate_rod()
 
-def stop_gacha_system():
-    global gacha_active, gacha_timer
-    gacha_active = False
-    if gacha_timer:
-        root.after_cancel(gacha_timer)
-        print("Timer de peche arrete")
 
-def schedule_next_fish():
-    global gacha_timer, next_fish_time
-    if not gacha_active:
-        return
-    
-    import random
-    # Temps aléatoire entre 5-60 secondes
-    wait_time = random.randint(5000, 60000)  # en millisecondes
-    next_fish_time = wait_time
-    
-    print(f"Le pet lance sa ligne... Prochaine capture dans {wait_time//1000} secondes")
-    gacha_timer = root.after(wait_time, catch_fish)
+def toggle_fishing():
+    global fishing_mode, gacha_timer, fishing_anim_id, auto_fish_active
 
-def catch_fish(cheat_mode=False):
-    global fishing_start_time
-    
-    if not gacha_active:
-        return
-    
-    print("Quelque chose mord a l'hamecon !")
-    
-    # Calculer le multiplicateur de chance basé sur le temps
-    import random
-    import time
-    current_time = time.time()
-    elapsed_time = min(current_time - fishing_start_time, 60)  # Max 60 secondes
-    chance_multiplier = (elapsed_time / 60) + 0.5
-    
-    # Déterminer le poisson attrapé
-    fish_data = calculate_fish_catch(chance_multiplier)
-    
-    # Afficher le résultat
-    display_catch(fish_data)
-    
-    # Mettre à jour la collection
-    update_collection(fish_data)
-    
-    # Programmer la prochaine pêche SEULEMENT si ce n'est pas la triche
-    if gacha_active and not cheat_mode:
-        schedule_next_fish()
-
-def calculate_fish_catch(chance_multiplier):
-    import random
-    
-    # Choisir la rareté
-    rarity = choose_rarity(chance_multiplier)
-    
-    # Choisir un poisson dans cette rareté
-    fish_list = FISH_DATABASE[rarity]
-    fish = random.choice(fish_list)
-    
-    # Vérifier si mutation
-    mutation_data = check_mutation(chance_multiplier)
-    
-    return {
-        "name": fish["name"],
-        "description": fish["description"],
-        "rarity": rarity,
-        "mutation": mutation_data["type"] if mutation_data else None,
-        "final_rarity": mutation_data["final_rarity"] if mutation_data else rarity,
-        "multiplier": mutation_data["multiplier"] if mutation_data else 1
-    }
-
-def choose_rarity(chance_multiplier):
-    import random
-    
-    # Ajuster les probabilités avec le multiplicateur
-    adjusted_chances = {}
-    total_chance = 0
-    
-    for rarity, base_chance in RARITY_CHANCES.items():
-        # Les rarités plus élevées bénéficient plus du multiplicateur
-        rarity_bonus = 1 + (chance_multiplier - 1) * (RARITY_CHANCES[rarity] / 100)
-        adjusted_chance = base_chance * rarity_bonus
-        adjusted_chances[rarity] = adjusted_chance
-        total_chance += adjusted_chance
-    
-    # Normaliser pour que le total soit 100
-    for rarity in adjusted_chances:
-        adjusted_chances[rarity] = (adjusted_chances[rarity] / total_chance) * 100
-    
-    # Choisir la rareté
-    roll = random.uniform(0, 100)
-    cumulative = 0
-    
-    for rarity, chance in adjusted_chances.items():
-        cumulative += chance
-        if roll <= cumulative:
-            return rarity
-    
-    return "Commun"  # Valeur par défaut
-
-def check_mutation(chance_multiplier):
-    import random
-    
-    # Chance de base de mutation : 5%
-    mutation_chance = 0.05 * chance_multiplier
-    
-    if random.random() < mutation_chance:
-        # Choisir une mutation
-        mutation_types = list(MUTATIONS.keys())
-        # Les mutations plus rares ont moins de chances
-        mutation_weights = [1, 0.8, 0.6, 0.3, 0.1]  # Du plus commun au plus rare
-        mutation = random.choices(mutation_types, weights=mutation_weights)[0]
-        
-        mutation_info = MUTATIONS[mutation]
-        
-        return {
-            "type": mutation,
-            "multiplier": mutation_info["multiplier"],
-            "final_rarity": get_mutated_rarity(mutation_info["multiplier"])
-        }
-    
-    return None
-
-def get_mutated_rarity(multiplier):
-    # Déterminer la nouvelle rareté basée sur le multiplicateur
-    if multiplier >= 20:
-        return "Légendaire"
-    elif multiplier >= 10:
-        return "Mythique"
-    elif multiplier >= 5:
-        return "Épique"
-    elif multiplier >= 3:
-        return "Rare"
-    elif multiplier >= 2:
-        return "Peu Commun"
-    else:
-        return "Commun"
-
-def display_catch(fish_data):
-    name = fish_data["name"]
-    rarity = fish_data["rarity"]
-    mutation = fish_data["mutation"]
-    final_rarity = fish_data["final_rarity"]
-    
-    # Arrêter l'aura précédente avant d'en créer une nouvelle
-    stop_aura()
-    
-    # Activer la nouvelle aura
-    start_aura(final_rarity)
-    
-    # Plus besoin de timer d'arrêt automatique
-    
-    if mutation:
-        mutation_info = MUTATIONS[mutation]
-        print(f"MUTATION RARE ! {mutation_info['message']}")
-        print(f"{name} {mutation} ({final_rarity} x {fish_data['multiplier']}) !")
-        
-        if final_rarity == "Légendaire":
-            print("Capture legendaire !")
-    else:
-        print(f"{name} ({rarity}) attrape !")
-    
-    print(f"{fish_data['description']}")
-
-def update_collection(fish_data):
-    global fish_collection
-    
-    fish_key = f"{fish_data['name']}"
-    if fish_data['mutation']:
-        fish_key += f" {fish_data['mutation']}"
-    
-    if fish_key not in fish_collection:
-        fish_collection[fish_key] = {
-            "count": 0,
-            "rarity": fish_data["final_rarity"],
-            "mutation": fish_data["mutation"]
-        }
-        print(f"Premier {fish_key} capture !")
-    
-    fish_collection[fish_key]["count"] += 1
-    
-    print("Collection mise a jour !")
-    
-    # Afficher les statistiques
-    total_fish = sum(item["count"] for item in fish_collection.values())
-    legendary_count = sum(item["count"] for item in fish_collection.values() if item["rarity"] == "Légendaire")
-    mutation_count = sum(item["count"] for item in fish_collection.values() if item["mutation"])
-    
-    print(f"Statistiques de peche :")
-    print(f"   Total : {total_fish} poissons")
-    print(f"   Legendaires : {legendary_count}")
-    print(f"   Mutations : {mutation_count}")
-    
-    if total_fish % 100 == 0:
-        print(f"{total_fish} poissons captures !")
-
-def animate_fishing():
-    global fishing_timer
-    
     if fishing_mode:
+        # Cancel current cast (also disables auto-fish)
+        auto_fish_active = False
+        fishing_mode = False
+        if gacha_timer:
+            root.after_cancel(gacha_timer)
+            gacha_timer = None
+        if fishing_anim_id:
+            root.after_cancel(fishing_anim_id)
+            fishing_anim_id = None
+        canvas.delete("rod")
         draw_character()
-        # Redessiner toutes les 500ms pour l'animation
-        fishing_timer = root.after(500, animate_fishing)
+        return
+
+    if len(inventory) >= inv_capacity:
+        show_overlay("Inventaire plein !", '#FF4444')
+        return
+
+    _start_cast()
+
+
+def toggle_auto_fish(event=None):
+    """Space key: toggle auto-fishing (only if upgrade purchased)."""
+    global auto_fish_active
+    if not auto_fish_unlocked:
+        return
+    auto_fish_active = not auto_fish_active
+    if auto_fish_active and not fishing_mode:
+        if len(inventory) < inv_capacity:
+            _start_cast()
+        else:
+            show_overlay("Inventaire plein !", '#FF4444')
+            auto_fish_active = False
+    draw_character()
+
+
+def do_catch():
+    global fishing_mode, gacha_timer, coins, fishing_anim_id, _catch_display
+
+    fishing_mode    = False
+    gacha_timer     = None
+    fishing_anim_id = None
+
+    elapsed    = time.time() - fishing_start_time
+    prog       = min(elapsed / fish_duration, 1.0)
+    luck_bonus = base_luck() + prog * 30
+    fish       = roll_fish(luck_bonus)
+
+    canvas.delete("rod")
+
+    if len(inventory) < inv_capacity:
+        inventory.append(fish)
+
+        # Launch spinning catch display
+        if _catch_display:
+            _catch_display.stop()
+        _catch_display = CatchDisplay(fish)
+
+        start_aura(fish['rarity'])
+        mods = (''.join([
+            ' ✦SHINY' if fish['shiny'] else '',
+            ' ANTIQUE' if fish['antique'] else '',
+            ' ABYSSAL' if fish['abyssal'] else '',
+        ])).strip()
+        print(f"Pêché : {fish['name']} {mods}  {fish['size']}cm  +{fish['value']}or")
+    else:
+        show_overlay("Inventaire plein !\nPoisson relâché.", '#FF4444')
+
+    save_game()
+    draw_character()
+    _refresh_windows()
+
+    # Auto-fish: restart cast after a short pause
+    global auto_fish_active
+    if auto_fish_active and len(inventory) < inv_capacity:
+        root.after(1500, _start_cast)
+    elif auto_fish_active and len(inventory) >= inv_capacity:
+        auto_fish_active = False
+        show_overlay("Auto-pêche arrêtée\n(sac plein)", '#FF8800')
+        draw_character()
+
+
+def _animate_rod():
+    global fishing_anim_id
+    if fishing_mode:
+        draw_fishing_gear()
+        draw_character()
+        fishing_anim_id = root.after(500, _animate_rod)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OVERLAY MESSAGE
+# ═══════════════════════════════════════════════════════════════════════════════
+def show_overlay(text, color='#FFD700'):
+    global _overlay_ids, _overlay_timer
+    for oid in _overlay_ids:
+        canvas.delete(oid)
+    if _overlay_timer:
+        root.after_cancel(_overlay_timer)
+    lines = text.count('\n') + 1
+    bh    = 22 * lines + 10
+    bx1, by1, bx2, by2 = x - 95, y + 128, x + 95, y + 128 + bh
+    _overlay_ids = [
+        canvas.create_rectangle(bx1, by1, bx2, by2, fill='#0E0E1A', outline=color, width=2),
+        canvas.create_text(x, (by1 + by2) // 2, text=text, fill=color,
+                           font=('Arial', 10, 'bold'), justify='center'),
+    ]
+    _overlay_timer = root.after(3500, _clear_overlay)
+
+
+def _clear_overlay():
+    global _overlay_ids, _overlay_timer
+    for oid in _overlay_ids:
+        canvas.delete(oid)
+    _overlay_ids   = []
+    _overlay_timer = None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# POPUP HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+BG   = '#0E0E1A'
+BG2  = '#16162A'
+BG3  = '#1E1E35'
+FG   = '#DDDDEE'
+ACC  = '#FFD700'
+GRAY = '#666688'
+
+
+def _make_popup(title, w, h, ox=310, oy=0):
+    win = tk.Toplevel(root)
+    win.overrideredirect(True)
+    win.attributes('-topmost', True)
+    win.geometry(f"{w}x{h}+{root.winfo_x()+ox}+{root.winfo_y()+oy}")
+    win.configure(bg=BG)
+
+    tb = tk.Frame(win, bg='#1A1A30', height=28)
+    tb.pack(fill='x')
+    tb.pack_propagate(False)
+
+    def _ds(e): win._dx, win._dy = e.x, e.y
+    def _dm(e): win.geometry(f"+{win.winfo_x()+e.x-win._dx}+{win.winfo_y()+e.y-win._dy}")
+    tb.bind('<Button-1>', _ds)
+    tb.bind('<B1-Motion>', _dm)
+
+    tk.Label(tb, text=title, bg='#1A1A30', fg=ACC,
+             font=('Arial', 11, 'bold')).pack(side='left', padx=8, pady=4)
+    tk.Button(tb, text='✕', bg='#1A1A30', fg='#888888', relief='flat',
+              cursor='hand2', font=('Arial', 10),
+              activebackground='#3A1A1A', activeforeground='#FF6666',
+              command=win.destroy).pack(side='right', padx=6, pady=2)
+
+    win.bind('<Destroy>', lambda _e: root.focus_force() if _e.widget is win else None)
+    win.bind('b', open_shop)
+    win.bind('B', open_shop)
+    win.bind('e', open_inventory)
+    win.bind('E', open_inventory)
+    win.bind('c', open_catalogue)
+    win.bind('C', open_catalogue)
+    win.bind('<space>', toggle_auto_fish)
+    win.bind('<Escape>', lambda e: win.destroy())
+    win.focus_force()
+    return win
+
+
+def _btn(parent, text, cmd, bg='#1A3A1A', fg=FG, w=12):
+    return tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg,
+                     activebackground='#333355', activeforeground=FG,
+                     relief='flat', cursor='hand2',
+                     font=('Arial', 9, 'bold'), width=w, pady=4)
+
+
+def _refresh_windows():
+    if _shop_win and _shop_win.winfo_exists():
+        _build_shop(_shop_win)
+    if _inv_win and _inv_win.winfo_exists():
+        _build_inventory(_inv_win)
+    if _cat_win and _cat_win.winfo_exists():
+        _build_catalogue(_cat_win)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SHOP  (key B)
+# ═══════════════════════════════════════════════════════════════════════════════
+def open_shop(event=None):
+    global _shop_win
+    if _shop_win and _shop_win.winfo_exists():
+        _shop_win.lift(); return
+    _shop_win = _make_popup("Boutique", 340, 480)
+    _build_shop(_shop_win)
+
+
+def _build_shop(win):
+    for w in list(win.winfo_children())[1:]:
+        w.destroy()
+
+    body = tk.Frame(win, bg=BG)
+    body.pack(fill='both', expand=True, padx=8, pady=6)
+
+    tk.Label(body, text=f"Or disponible : {coins}", bg=BG, fg=ACC,
+             font=('Arial', 11, 'bold')).pack(anchor='e', padx=4, pady=(0, 4))
+
+    # ── Rods ──
+    tk.Label(body, text="── Cannes à pêche ──", bg=BG, fg='#AA7733',
+             font=('Arial', 9, 'bold')).pack(pady=(4, 2))
+
+    for i, rod in enumerate(ROD_TIERS[1:], start=1):
+        owned    = rod_tier >= i
+        unlocked = rod_tier >= i - 1
+        aff      = coins >= rod['price'] and not owned and unlocked
+
+        row = tk.Frame(body, bg=BG2)
+        row.pack(fill='x', pady=2, padx=2)
+
+        fg_col = '#66CC66' if owned else (FG if unlocked else GRAY)
+        tk.Label(row, text=rod['name'], bg=BG2, fg=fg_col,
+                 font=('Arial', 9, 'bold'), width=15, anchor='w').pack(side='left', padx=6, pady=5)
+        if owned:
+            tk.Label(row, text="✓", bg=BG2, fg='#66CC66',
+                     font=('Arial', 9, 'bold')).pack(side='right', padx=8)
+        elif not unlocked:
+            tk.Label(row, text="🔒", bg=BG2, fg=GRAY,
+                     font=('Arial', 9)).pack(side='right', padx=8)
+        else:
+            def _buy(idx=i):
+                global coins, rod_tier
+                if coins >= ROD_TIERS[idx]['price'] and rod_tier == idx - 1:
+                    coins -= ROD_TIERS[idx]['price']
+                    rod_tier = idx
+                    save_game()
+                    draw_character()
+                    _build_shop(win)
+            b = _btn(row, f"{rod['price']} or", _buy,
+                     bg='#1E2E1E' if aff else BG3, fg=ACC if aff else GRAY, w=10)
+            b.config(state='normal' if aff else 'disabled')
+            b.pack(side='right', padx=6, pady=4)
+
+    # ── Upgrades ──
+    tk.Label(body, text="── Améliorations ──", bg=BG, fg='#33AACC',
+             font=('Arial', 9, 'bold')).pack(pady=(10, 2))
+
+    # Inventory
+    inv_lvl   = (inv_capacity - 10) // 5
+    inv_price = int(150 * (2.5 ** inv_lvl))
+    inv_max   = inv_capacity >= 30
+    inv_aff   = coins >= inv_price and not inv_max
+
+    row_inv = tk.Frame(body, bg=BG2)
+    row_inv.pack(fill='x', pady=2, padx=2)
+    tk.Label(row_inv, text=f"Inventaire +5   ({inv_capacity}/30)",
+             bg=BG2, fg=FG, font=('Arial', 9), width=22, anchor='w').pack(side='left', padx=6, pady=5)
+    if inv_max:
+        tk.Label(row_inv, text="MAX", bg=BG2, fg='#66CC66',
+                 font=('Arial', 8, 'bold')).pack(side='right', padx=8)
+    else:
+        def _buy_inv():
+            global coins, inv_capacity
+            p = int(150 * (2.5 ** ((inv_capacity - 10) // 5)))
+            if coins >= p and inv_capacity < 30:
+                coins -= p
+                inv_capacity += 5
+                save_game()
+                draw_character()
+                _build_shop(win)
+        b2 = _btn(row_inv, f"{inv_price} or", _buy_inv,
+                  bg='#1A1A2E' if inv_aff else BG3, fg=ACC if inv_aff else GRAY, w=10)
+        b2.config(state='normal' if inv_aff else 'disabled')
+        b2.pack(side='right', padx=6, pady=4)
+
+    # Luck charm
+    luck_price = int(300 * (2.0 ** luck_level))
+    luck_aff   = coins >= luck_price
+
+    row_luck = tk.Frame(body, bg=BG2)
+    row_luck.pack(fill='x', pady=2, padx=2)
+    tk.Label(row_luck, text=f"Charme de Chance  niv.{luck_level}  (+{base_luck()}%)",
+             bg=BG2, fg=FG, font=('Arial', 9), width=28, anchor='w').pack(side='left', padx=6, pady=5)
+
+    def _buy_luck():
+        global coins, luck_level
+        p = int(300 * (2.0 ** luck_level))
+        if coins >= p:
+            coins -= p
+            luck_level += 1
+            save_game()
+            draw_character()
+            _build_shop(win)
+    b3 = _btn(row_luck, f"{luck_price} or", _buy_luck,
+              bg='#1E1228' if luck_aff else BG3, fg=ACC if luck_aff else GRAY, w=10)
+    b3.config(state='normal' if luck_aff else 'disabled')
+    b3.pack(side='right', padx=6, pady=4)
+
+    # Auto-fish
+    AUTO_PRICE = 100
+    af_aff  = coins >= AUTO_PRICE and not auto_fish_unlocked
+
+    row_af = tk.Frame(body, bg=BG2)
+    row_af.pack(fill='x', pady=2, padx=2)
+    af_name = "Auto-Pêche  [Espace]"
+    tk.Label(row_af, text=af_name, bg=BG2, fg=('#00CCFF' if auto_fish_unlocked else FG),
+             font=('Arial', 9, 'bold' if auto_fish_unlocked else 'normal'),
+             width=22, anchor='w').pack(side='left', padx=6, pady=2)
+
+    if auto_fish_unlocked:
+        status = "✓ Débloquée"
+        tk.Label(row_af, text=status, bg=BG2, fg='#00CCFF',
+                 font=('Arial', 8, 'bold')).pack(side='right', padx=8, pady=5)
+    else:
+        def _buy_af():
+            global coins, auto_fish_unlocked
+            if coins >= AUTO_PRICE and not auto_fish_unlocked:
+                coins -= AUTO_PRICE
+                auto_fish_unlocked = True
+                save_game()
+                draw_character()
+                _build_shop(win)
+        b4 = _btn(row_af, f"{AUTO_PRICE} or", _buy_af,
+                  bg='#1A1A2E' if af_aff else BG3, fg='#00CCFF' if af_aff else GRAY, w=10)
+        b4.config(state='normal' if af_aff else 'disabled')
+        b4.pack(side='right', padx=6, pady=4)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INVENTORY  (key E)  — image thumbnails + modifier badges
+# ═══════════════════════════════════════════════════════════════════════════════
+_inv_sel = [None]   # mutable container so inner funcs can write it
+
+
+def open_inventory(event=None):
+    global _inv_win
+    if _inv_win and _inv_win.winfo_exists():
+        _build_inventory(_inv_win); _inv_win.lift(); return
+    _inv_win = _make_popup("Inventaire", 360, 450, ox=310, oy=0)
+    _build_inventory(_inv_win)
+
+
+def _build_inventory(win):
+    _inv_sel[0] = None
+    for w in list(win.winfo_children())[1:]:
+        w.destroy()
+
+    body = tk.Frame(win, bg=BG)
+    body.pack(fill='both', expand=True, padx=6, pady=4)
+
+    tk.Label(body, text=f"Inventaire  {len(inventory)} / {inv_capacity}",
+             bg=BG, fg=FG, font=('Arial', 11, 'bold')).pack(anchor='w', pady=(0, 3))
+
+    # ── Scrollable canvas list ──
+    outer = tk.Frame(body, bg=BG)
+    outer.pack(fill='both', expand=True)
+    vsb = tk.Scrollbar(outer, orient='vertical', bg=BG, troughcolor=BG2, width=10)
+    vsb.pack(side='right', fill='y')
+    cav = tk.Canvas(outer, bg=BG, highlightthickness=0, yscrollcommand=vsb.set)
+    cav.pack(side='left', fill='both', expand=True)
+    vsb.config(command=cav.yview)
+
+    inner = tk.Frame(cav, bg=BG)
+    wid   = cav.create_window((0, 0), window=inner, anchor='nw')
+
+    def _resize(e):
+        cav.configure(scrollregion=cav.bbox('all'))
+    def _cav_resize(e):
+        cav.itemconfig(wid, width=e.width)
+    inner.bind('<Configure>', _resize)
+    cav.bind('<Configure>', _cav_resize)
+    cav.bind('<MouseWheel>', lambda e: cav.yview_scroll(-1*(e.delta//120), 'units'))
+
+    row_frames = []
+
+    def _select(idx):
+        _inv_sel[0] = idx
+        for i2, rf in enumerate(row_frames):
+            rf.config(bg='#2A2A4A' if i2 == idx else (BG2 if i2 % 2 == 0 else BG3))
+            for child in rf.winfo_children():
+                _recolor(child, '#2A2A4A' if i2 == idx else (BG2 if i2 % 2 == 0 else BG3))
+        _update_sell_btn()
+
+    def _recolor(widget, bg):
+        try:
+            widget.config(bg=bg)
+        except Exception:
+            pass
+        for child in widget.winfo_children():
+            _recolor(child, bg)
+
+    for i, fish in enumerate(inventory):
+        rc      = RARITY_COLOR.get(fish['rarity'], '#AAA')
+        row_bg  = BG2 if i % 2 == 0 else BG3
+        row     = tk.Frame(inner, bg=row_bg, cursor='hand2')
+        row.pack(fill='x', pady=0, padx=2)
+        row_frames.append(row)
+
+        # Thumbnail
+        if fish['name'] in FISH_IMAGES_SM:
+            img_lbl = tk.Label(row, image=FISH_IMAGES_SM[fish['name']], bg=row_bg)
+            img_lbl.pack(side='left', padx=4, pady=3)
+            img_lbl.bind('<Button-1>', lambda e, idx=i: _select(idx))
+
+        # Name + rarity
+        name_col = rc
+        name_txt = fish['name']
+        tk.Label(row, text=name_txt, bg=row_bg, fg=name_col,
+                 font=('Arial', 9, 'bold'), width=14, anchor='w').pack(side='left', padx=2)
+
+        # Modifier badges
+        badge_frame = tk.Frame(row, bg=row_bg)
+        badge_frame.pack(side='left')
+        if fish.get('shiny'):
+            tk.Label(badge_frame, text='SHI', bg='#664400', fg='#FFDD55',
+                     font=('Arial', 7, 'bold'), padx=1).pack(side='left', padx=1)
+        if fish.get('antique'):
+            tk.Label(badge_frame, text='ANT', bg='#4A2A00', fg='#FFAA44',
+                     font=('Arial', 7, 'bold'), padx=1).pack(side='left', padx=1)
+        if fish.get('abyssal'):
+            tk.Label(badge_frame, text='ABY', bg='#001A3A', fg='#44AAFF',
+                     font=('Arial', 7, 'bold'), padx=1).pack(side='left', padx=1)
+        if fish.get('albinos'):
+            tk.Label(badge_frame, text='ALB', bg='#001A3A', fg='#44AAFF',
+                     font=('Arial', 7, 'bold'), padx=1).pack(side='left', padx=1)
+        if fish.get('malade'):
+            tk.Label(badge_frame, text='MAL', bg='#3A0000', fg='#FF4444',
+                     font=('Arial', 7, 'bold'), padx=1).pack(side='left', padx=1)
+
+        # Size + value
+        tk.Label(row, text=f"{fish['size']}cm", bg=row_bg, fg=GRAY,
+                 font=('Arial', 8,'bold'), width=7, anchor='e').pack(side='left')
+        tk.Label(row, text=f"{fish['value']} or", bg=row_bg, fg=ACC,
+                 font=('Arial', 8, 'bold'), width=7, anchor='e').pack(side='left', padx=1)
+
+        row.bind('<Button-1>', lambda e, idx=i: _select(idx))
+
+    # ── Bottom bar ──
+    bot = tk.Frame(body, bg=BG)
+    bot.pack(fill='x', pady=(5, 0))
+
+    sell_var = tk.StringVar(value="Vendre")
+    sell_btn = _btn(bot, "Vendre", lambda: None, bg='#1A3A1A', w=14)
+    sell_btn.pack(side='left', padx=4)
+    sell_btn.config(state='disabled')
+
+    total_val = sum(f['value'] for f in inventory)
+    _btn(bot, f"Tout vendre ({total_val}or)", _sell_all_fn(win), bg='#3A2800', fg=ACC, w=18).pack(side='right', padx=4)
+
+    def _update_sell_btn():
+        idx = _inv_sel[0]
+        if idx is not None and idx < len(inventory):
+            f = inventory[idx]
+            sell_btn.config(
+                text=f"Vendre {f['value']}or",
+                state='normal',
+                command=lambda: _sell_one_fn(win, idx)
+            )
+        else:
+            sell_btn.config(text="Vendre", state='disabled', command=lambda: None)
+
+    _update_sell_btn()
+
+
+def _update_catalogue(fish):
+    entry = catalogue[fish['name']]
+    entry['count'] += 1
+    if entry['best'] is None or fish['value'] > entry['best']['value']:
+        entry['best'] = fish
+
+
+def _sell_one_fn(win, idx):
+    global coins
+    if idx < len(inventory):
+        fish = inventory.pop(idx)
+        coins += fish['value']
+        _update_catalogue(fish)
+        save_game()
+        draw_character()
+        show_overlay(f"+{fish['value']} or", ACC)
+        _refresh_windows()
+
+
+def _sell_all_fn(win):
+    def _do():
+        global coins
+        if not inventory:
+            return
+        total = sum(f['value'] for f in inventory)
+        for fish in inventory:
+            _update_catalogue(fish)
+        inventory.clear()
+        coins += total
+        save_game()
+        draw_character()
+        show_overlay(f"+{total} or  (tout vendu)", ACC)
+        _refresh_windows()
+    return _do
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# CATALOGUE  (key C)  — with fish images
+# ═══════════════════════════════════════════════════════════════════════════════
+def open_catalogue(event=None):
+    global _cat_win
+    if _cat_win and _cat_win.winfo_exists():
+        _build_catalogue(_cat_win); _cat_win.lift(); return
+    _cat_win = _make_popup("Catalogue", 440, 520, ox=-450, oy=0)
+    _build_catalogue(_cat_win)
+
+
+def _build_catalogue(win):
+    for w in list(win.winfo_children())[1:]:
+        w.destroy()
+
+    body = tk.Frame(win, bg=BG)
+    body.pack(fill='both', expand=True, padx=6, pady=4)
+
+    unlocked = sum(1 for d in FISH_DEFS if catalogue[d['name']]['count'] > 0)
+    tk.Label(body, text=f"Découverts : {unlocked} / {len(FISH_DEFS)}",
+             bg=BG, fg=FG, font=('Arial', 10, 'bold')).pack(anchor='w', pady=(0, 5))
+
+    outer = tk.Frame(body, bg=BG)
+    outer.pack(fill='both', expand=True)
+    vsb = tk.Scrollbar(outer, orient='vertical', bg=BG, troughcolor=BG2, width=10)
+    vsb.pack(side='right', fill='y')
+    cav = tk.Canvas(outer, bg=BG, highlightthickness=0, yscrollcommand=vsb.set)
+    cav.pack(side='left', fill='both', expand=True)
+    vsb.config(command=cav.yview)
+
+    inner = tk.Frame(cav, bg=BG)
+    wid   = cav.create_window((0, 0), window=inner, anchor='nw')
+
+    def _on_cfg(e):
+        cav.configure(scrollregion=cav.bbox('all'))
+    def _on_cav(e):
+        cav.itemconfig(wid, width=e.width)
+    inner.bind('<Configure>', _on_cfg)
+    cav.bind('<Configure>', _on_cav)
+
+    def _scroll(e):
+        cav.yview_scroll(-1 * (e.delta // 120), 'units')
+
+    def _bind_scroll(widget):
+        widget.bind('<MouseWheel>', _scroll)
+        for child in widget.winfo_children():
+            _bind_scroll(child)
+
+    COLS     = 3
+    CARD_W   = 126
+    CARD_H   = 148
+
+    for idx, defn in enumerate(FISH_DEFS):
+        col_n = idx % COLS
+        row_n = idx // COLS
+        entry = catalogue[defn['name']]
+        found = entry['count'] > 0
+        rc    = RARITY_COLOR.get(defn['rarity'], '#AAA')
+        border = rc if found else '#2A2A44'
+
+        card = tk.Frame(inner, bg=BG2, highlightbackground=border, highlightthickness=1,
+                        width=CARD_W, height=CARD_H)
+        card.pack_propagate(False)
+        card.grid(row=row_n, column=col_n, padx=5, pady=5, sticky='nsew')
+        inner.columnconfigure(col_n, weight=1)
+
+        # Rarity badge
+        badge_bg = border if found else '#1A1A2A'
+        tk.Label(card, text=defn['rarity'], bg=badge_bg,
+                 fg='#111' if found else (rc if defn['rarity'] != 'Commun' else '#333355'),
+                 font=('Arial', 7, 'bold')).pack(fill='x')
+
+        if found:
+            img = FISH_IMAGES_MD.get(defn['name'])
+            if img:
+                tk.Label(card, image=img, bg=BG2).pack(pady=(3, 0))
+            tk.Label(card, text=defn['name'], bg=BG2, fg=rc,
+                     font=('Arial', 8, 'bold'), wraplength=CARD_W - 4).pack(pady=(2, 0))
+            best = entry['best']
+            if best:
+                mods = ' '.join(filter(None, [
+                    '✦' if best.get('shiny')   else '',
+                    'ANT' if best.get('antique') else '',
+                    'ABY' if best.get('abyssal') else '',
+                ]))
+                if mods:
+                    tk.Label(card, text=mods, bg=BG2, fg='#FFEE44',
+                             font=('Arial', 7, 'bold')).pack()
+                tk.Label(card, text=f"{best['size']} cm · {best['value']} or",
+                         bg=BG2, fg=ACC, font=('Arial', 7, 'bold')).pack()
+            tk.Label(card, text=f"× {entry['count']} pêché(s)", bg=BG2, fg='#556655',
+                     font=('Arial', 7)).pack(pady=(1, 0))
+        else:
+            img = LOCKED_IMAGE
+            if img:
+                tk.Label(card, image=img, bg=BG2).pack(pady=(3, 0))
+            tk.Label(card, text="???", bg=BG2, fg='#2A2A44',
+                     font=('Arial', 11, 'bold')).pack(pady=(2, 1))
+            tk.Label(card, text="Non découvert", bg=BG2, fg='#333355',
+                     font=('Arial', 7)).pack()
+
+    # Bind scroll to all widgets so hovering over a card still scrolls
+    win.update_idletasks()
+    _bind_scroll(inner)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# DRAG & CLICK
+# ═══════════════════════════════════════════════════════════════════════════════
+def _hit_test(ex, ey):
+    if photo_image:
+        return (x - 125 <= ex <= x + 125) and (y - 125 <= ey <= y + 125)
+    return (ex - x) ** 2 + (ey - (y - 7)) ** 2 <= 900
+
 
 def on_click(event):
-    global dragging, drag_start_x, drag_start_y
-    # Vérifier si on clique sur le personnage (zones précises)
-    if photo_image:
-        # Si on a une image, utiliser une zone plus grande
-        if (x-125 <= event.x <= x+125 and y-125 <= event.y <= y+125):
-            dragging = True
-    else:
-        # Corps : rectangle autour du corps
-        if (x-10 <= event.x <= x+10 and y <= event.y <= y+25):
-            dragging = True
-        # Tête : cercle autour de la tête
-        elif ((event.x - x)**2 + (event.y - (y-7))**2 <= 64):  # rayon 8
-            dragging = True
-        # Chapeau : ellipse autour du chapeau
-        elif (x-10 <= event.x <= x+10 and y-20 <= event.y <= y-15):
-            dragging = True
-    
-    if dragging:
+    global dragging, did_drag, drag_start_x, drag_start_y
+    if _hit_test(event.x, event.y):
+        dragging     = True
+        did_drag     = False
         drag_start_x = event.x_root - root.winfo_x()
         drag_start_y = event.y_root - root.winfo_y()
 
+
+def on_drag(event):
+    global did_drag
+    if dragging:
+        did_drag = True
+        nx = event.x_root - drag_start_x
+        ny = event.y_root - drag_start_y
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        nx = max(-270, min(sw - 30, nx))
+        ny = max(-270, min(sh - 30, ny))
+        root.geometry(f"300x420+{nx}+{ny}")
+
+
+def on_release(event):
+    global dragging, did_drag
+    if dragging and not did_drag:
+        toggle_fishing()
+    dragging = did_drag = False
+
+
 def on_right_click(event):
-    # Clic droit pour charger une nouvelle image
     load_image()
     draw_character()
 
 
-def on_drag(event):
-    global dragging
-    if dragging:
-        new_x = event.x_root - drag_start_x
-        new_y = event.y_root - drag_start_y
-        
-        # Obtenir les dimensions de l'écran
-        screen_width = root.winfo_screenwidth()
-        screen_height = root.winfo_screenheight()
-        
-        # Limiter la position pour que la fenêtre ne sorte jamais complètement
-        # Garder au moins 30px visible
-        new_x = max(-270, min(screen_width - 30, new_x))
-        new_y = max(-270, min(screen_height - 30, new_y))
-        
-        root.geometry(f"300x300+{new_x}+{new_y}")
-
-def on_release(event):
-    global dragging
-    dragging = False
-
-def on_escape(event):
-    root.quit()
-
-def on_space(event):
-    toggle_fishing_mode()
-
-def on_c_key(event):
-    # Afficher la collection avec la touche C
-    show_collection()
-
-def on_t_key(event):
-    # Bouton de triche : pêcher instantanément
-    cheat_catch_fish()
-
-def cheat_catch_fish():
-    """Pêcher instantanément sans attendre le délai"""
-    global fishing_start_time, gacha_timer
-    
-    if not gacha_active:
-        print("Activez d'abord le mode peche avec espace !")
-        return
-    
-    print("🎣 TRICHE : Peche instantanee !")
-    
-    # Annuler le timer actuel
+# ═══════════════════════════════════════════════════════════════════════════════
+# KEY BINDINGS
+# ═══════════════════════════════════════════════════════════════════════════════
+def _cheat(event=None):
+    global fishing_mode, fishing_start_time, fish_duration, gacha_timer
     if gacha_timer:
         root.after_cancel(gacha_timer)
         gacha_timer = None
-    
-    # Pêcher immédiatement SANS relancer le timer automatique
-    # pour éviter les captures multiples
-    catch_fish(cheat_mode=True)
+    if not fishing_mode:
+        fishing_mode       = True
+        fishing_start_time = time.time() - 45
+        fish_duration      = 50
+    do_catch()
 
-def show_collection():
-    global fish_collection
-    
-    print("\n" + "="*50)
-    print("COLLECTION DE POISSONS")
-    print("="*50)
-    
-    if not fish_collection:
-        print("   Aucun poisson capturé pour le moment...")
-        print("   Activez le mode pêche avec la barre d'espace !")
-    else:
-        # Grouper par rareté
-        by_rarity = {}
-        for fish_key, data in fish_collection.items():
-            rarity = data["rarity"]
-            if rarity not in by_rarity:
-                by_rarity[rarity] = []
-            by_rarity[rarity].append((fish_key, data["count"]))
-        
-        # Afficher par rareté (de la plus rare à la plus commune)
-        rarity_order = ["Légendaire", "Mythique", "Épique", "Rare", "Peu Commun", "Commun"]
-        
-        for rarity in rarity_order:
-            if rarity in by_rarity:
-                print(f"\n{rarity} ({len(by_rarity[rarity])} types) :")
-                for fish_name, count in sorted(by_rarity[rarity]):
-                    print(f"   • {fish_name} : {count}")
-        
-        # Statistiques totales
-        total_fish = sum(item["count"] for item in fish_collection.values())
-        total_types = len(fish_collection)
-        legendary_count = sum(item["count"] for item in fish_collection.values() if item["rarity"] == "Légendaire")
-        mutation_count = sum(item["count"] for item in fish_collection.values() if item["mutation"])
-        
-        print(f"\nSTATISTIQUES GLOBALES :")
-        print(f"   Total de poissons : {total_fish}")
-        print(f"   Types differents : {total_types}/17")
-        print(f"   Legendaires : {legendary_count}")
-        print(f"   Mutations : {mutation_count}")
-        print(f"   Taux de legendaires : {(legendary_count/total_fish*100):.2f}%" if total_fish > 0 else "   Taux de legendaires : 0%")
-    
-    print("="*50 + "\n")
 
-# Événements
-canvas.bind("<Button-1>", on_click)
-canvas.bind("<ButtonRelease-1>", on_release)
-canvas.bind("<B1-Motion>", on_drag)
-canvas.bind("<Button-3>", on_right_click)  # Clic droit
-root.bind("<Escape>", on_escape)
-root.bind("<space>", on_space)  # Barre d'espace pour le mode pêche
-root.bind("c", on_c_key)  # Touche C pour voir la collection
-root.bind("C", on_c_key)  # Touche C majuscule aussi
-root.bind("t", on_t_key)  # Touche T pour la triche
-root.bind("T", on_t_key)  # Touche T majuscule aussi
+canvas.bind('<Button-1>',        on_click)
+canvas.bind('<B1-Motion>',       on_drag)
+canvas.bind('<ButtonRelease-1>', on_release)
+canvas.bind('<Button-3>',        on_right_click)
+root.bind('<Escape>',  lambda e: root.quit())
+root.bind('b',         open_shop)
+root.bind('B',         open_shop)
+root.bind('e',         open_inventory)
+root.bind('E',         open_inventory)
+root.bind('c',         open_catalogue)
+root.bind('C',         open_catalogue)
+root.bind('t',         _cheat)
+root.bind('T',         _cheat)
+root.bind('<space>',   toggle_auto_fish)
 
-# Charger l'image au démarrage
+# ═══════════════════════════════════════════════════════════════════════════════
+# START
+# ═══════════════════════════════════════════════════════════════════════════════
+load_game()
 load_image()
-
-# Dessin initial
 draw_character()
+root.focus_force()
+root.after(100, load_fish_images)
 
-# Lancement automatique
-if __name__ == "__main__":
-    print("PET PECHEUR - SYSTEME GACHA")
-    print("="*40)
-    print("CONTROLES :")
-    print("   • Clic gauche + glisser : Deplacer le pet")
-    print("   • Clic droit : Changer d'image")
-    print("   • Barre d'espace : Activer/desactiver le mode peche")
-    print("   • Touche C : Afficher la collection")
-    print("   • Touche T : TRICHE - Peche instantanee !")
-    print("   • Echap : Quitter")
-    print("="*40)
-    print("SYSTEME GACHA :")
-    print("   • Temps de peche : 5-60 secondes aleatoires")
-    print("   • Plus vous attendez, plus de chance de rarete !")
-    print("   • 17 poissons + 5 types de mutations possibles")
-    print("   • Collection automatique avec statistiques")
-    print("="*40)
-    print("Pret a pecher ? Appuyez sur espace !")
-    print("(Ou T pour la triche instantanee)")
+if __name__ == '__main__':
+    print("PET PÊCHEUR ─────────────────────────────────")
+    print("  Clic sur le chat   → Pêcher / Annuler")
+    print("  Espace             → Toggle auto-pêche (si acheté)")
+    print("  B                  → Boutique")
+    print("  E                  → Inventaire")
+    print("  C                  → Catalogue")
+    print("  T                  → Pêche instantanée (triche)")
+    print("  Clic droit         → Changer l'image")
+    print("  Échap              → Quitter")
+    print("─────────────────────────────────────────────")
     root.mainloop()
